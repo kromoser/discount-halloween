@@ -5,6 +5,12 @@ import { test, expect } from '@playwright/test';
 
 const GUEST = '/index.html?mock=1';
 
+// assets/config.js holds the real backend URL, so no test may reach it: a vote would
+// land in the real Sheet and a wrong password would count toward the real lockout.
+test.beforeEach(async ({ context }) => {
+  await context.route(/^https:\/\/script\.google(usercontent)?\.com\//, (route) => route.abort());
+});
+
 // Each test gets a fresh browser context, so its own localStorage.
 async function openGuest(page, status = 'OPEN') {
   await page.goto(GUEST);
@@ -405,6 +411,11 @@ test.describe('secrecy and safety', () => {
   });
 
   test('the mock is never loaded without ?mock=1, and no page code holds it', async ({ page }) => {
+    await page.route('**/assets/config.js', async (route) => {
+      const res = await route.fetch();
+      const body = (await res.text()).replace(/API_URL = '[^']*'/, "API_URL = 'PASTE_APPS_SCRIPT_EXEC_URL_HERE'");
+      await route.fulfill({ response: res, body });
+    });
     const requested = [];
     page.on('request', (r) => requested.push(r.url()));
     await page.goto('/index.html');
@@ -912,7 +923,7 @@ test.describe('live transport', () => {
     echoIsBroken = false;
     await page.route('**/assets/config.js', async (route) => {
       const res = await route.fetch();
-      const body = (await res.text()).replace('PASTE_APPS_SCRIPT_EXEC_URL_HERE', EXEC);
+      const body = (await res.text()).replace(/API_URL = '[^']*'/, `API_URL = '${EXEC}'`);
       await route.fulfill({ response: res, body });
     });
   });
