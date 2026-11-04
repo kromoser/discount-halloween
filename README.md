@@ -20,7 +20,7 @@ These steps need someone signed into Google and GitHub.
 5. **Deploy.** Choose Deploy → New deployment → type Web app, with Execute as: **Me** and Who has access: **Anyone**. Copy the URL ending in `/exec`.
 6. **Wire the pages.** Paste the URL into [`assets/config.js`](assets/config.js) as `API_URL`, and optionally the Sheet's URL as `SHEET_URL`. Commit and push.
 7. **Turn on Pages.** In the GitHub repo, go to Settings → Pages, choose "Deploy from a branch", then `main` / root. The site appears within a minute or two.
-8. **Make the QR code** for the guest URL and print it for the board.
+8. **Print the QR code.** [`qr.svg`](qr.svg) points at the guest URL. Print it for the board.
 
 ### Updating the script later
 
