@@ -363,10 +363,10 @@ export function installDevTools() {
 
   const style = document.createElement('style');
   style.textContent = `
-    .mock-panel { position: fixed; top: 8px; right: 8px; z-index: 10; max-width: 240px;
+    .mock-panel { position: fixed; top: 2px; right: 2px; z-index: 10; max-width: 240px;
       background: #000; border: 2px solid #ffd60a; color: #f3efe8;
       font: 500 11px/1.4 'IBM Plex Mono', ui-monospace, monospace; }
-    .mock-panel summary { padding: 4px 8px; cursor: pointer; color: #ffd60a; text-transform: uppercase;
+    .mock-panel summary { padding: 1px 6px; cursor: pointer; color: #ffd60a; text-transform: uppercase;
       letter-spacing: 0.08em; }
     .mock-panel__body { display: flex; flex-direction: column; gap: 8px; padding: 8px; }
     .mock-panel__row { display: flex; flex-wrap: wrap; gap: 4px; }

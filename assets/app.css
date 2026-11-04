@@ -81,7 +81,19 @@ button:focus-visible {
 .screen--dash { gap: 32px; padding-bottom: 32px; }
 
 .stack { display: flex; flex-direction: column; }
-.push-down { margin-top: auto; }
+.gap-6 { gap: 6px; }
+.gap-10 { gap: 10px; }
+.gap-12 { gap: 12px; }
+.gap-20 { gap: 20px; }
+
+.login-form { gap: 20px; }
+
+.ballot-form {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
 
 /* ---------- Type ---------- */
 
@@ -135,6 +147,9 @@ button:focus-visible {
   color: var(--sticker);
 }
 
+/* After the type rules above, whose margin: 0 would otherwise win. */
+.push-down { margin-top: auto; }
+
 /* ---------- Logo tag ---------- */
 
 .logo {
@@ -159,8 +174,8 @@ button:focus-visible {
   text-transform: uppercase;
 }
 
-.logo__small { font-size: 24px; letter-spacing: 0.18em; }
-.logo__big { font-size: 52px; letter-spacing: 0.01em; }
+.logo__small { font-size: clamp(19px, 6.2vw, 24px); letter-spacing: 0.18em; }
+.logo__big { font-size: clamp(42px, 13.4vw, 52px); letter-spacing: 0.01em; }
 
 .logo__hole {
   position: absolute;
@@ -273,6 +288,14 @@ button:focus-visible {
 }
 
 .sticker.is-invalid { border-color: var(--sticker); }
+
+/* The ring goes on the circle: on the input inside, it would draw a square in it. */
+.sticker:focus-within {
+  outline: 2px solid var(--sticker);
+  outline-offset: 3px;
+}
+
+.sticker__input:focus-visible { outline: none; }
 
 .sticker__hash {
   font-family: var(--font-display);
@@ -415,9 +438,8 @@ button:focus-visible {
 
 .receipt__teeth {
   height: 10px;
-  background:
-    linear-gradient(135deg, var(--paper) 50%, transparent 50%) 0 -10px / 20px 20px repeat-x,
-    linear-gradient(225deg, var(--paper) 50%, transparent 50%) 0 -10px / 20px 20px repeat-x;
+  margin-top: -1px; /* Overlaps the paper, so the rotated slip shows no seam. */
+  background: conic-gradient(from -45deg at 50% 100%, var(--paper) 90deg, transparent 0) 0 0 / 20px 10px repeat-x;
 }
 
 /* ---------- Winner tags ---------- */
@@ -669,3 +691,14 @@ button:focus-visible {
 .flag-groups { display: flex; flex-direction: column; gap: 14px; }
 
 .muted-note { margin: 0; font-size: 14px; color: var(--dim); }
+
+.empty-row { padding: 10px 0; }
+
+.sheet-link {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 600;
+}

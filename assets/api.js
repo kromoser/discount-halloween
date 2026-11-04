@@ -14,7 +14,7 @@ export const IS_MOCK = new URLSearchParams(location.search).get('mock') === '1';
 const TIMEOUT_MS = 30000;
 
 async function request(url, init) {
-  if (!/^https:\/\//.test(API_URL)) throw new Error('API_URL is not set in assets/config.js');
+  if (!/^https?:\/\//.test(API_URL)) throw new Error('API_URL is not set in assets/config.js');
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);

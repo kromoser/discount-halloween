@@ -10,8 +10,159 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <link rel="stylesheet" href="assets/app.css">
+<script type="module" src="assets/guest.js"></script>
 </head>
 <body>
-<main class="screen"><p class="eyebrow">Discount Halloween</p></main>
+<main>
+
+<section id="screen-loading" class="screen">
+  <header class="header-logo">
+    <div class="logo">
+      <h1 class="logo__tag"><span class="logo__small">Discount</span><span class="logo__big">Halloween</span></h1>
+      <span class="logo__hole" aria-hidden="true"></span>
+      <span class="logo__off" aria-hidden="true"><span>70%</span><span class="logo__off-small">off</span></span>
+    </div>
+    <p class="eyebrow">Opening the store…</p>
+  </header>
+</section>
+
+<section id="screen-soon" class="screen screen--roomy" hidden>
+  <header class="header-logo">
+    <div class="logo">
+      <h1 class="logo__tag"><span class="logo__small">Discount</span><span class="logo__big">Halloween</span></h1>
+      <span class="logo__hole" aria-hidden="true"></span>
+      <span class="logo__off" aria-hidden="true"><span>70%</span><span class="logo__off-small">off</span></span>
+    </div>
+    <p class="eyebrow">Costume ballot</p>
+  </header>
+  <h2 class="display display--64 display--orange">Voting opens soon.</h2>
+  <p class="fine-print push-down">Keep this tab open</p>
+</section>
+
+<section id="screen-ballot" class="screen" hidden>
+  <header class="header-logo">
+    <div class="logo">
+      <h1 class="logo__tag"><span class="logo__small">Discount</span><span class="logo__big">Halloween</span></h1>
+      <span class="logo__hole" aria-hidden="true"></span>
+      <span class="logo__off" aria-hidden="true"><span>70%</span><span class="logo__off-small">off</span></span>
+    </div>
+    <p class="eyebrow">Costume ballot · Voting open</p>
+  </header>
+
+  <form id="ballot-form" class="ballot-form" novalidate>
+    <div class="stack gap-6">
+      <label class="field" for="voter-name">
+        <span class="eyebrow">Your name</span>
+        <input id="voter-name" class="field__input" type="text" name="name" autocomplete="name" maxlength="40" required autocapitalize="words" spellcheck="false" placeholder="So we know who voted" aria-describedby="name-error">
+      </label>
+      <p id="name-error" class="error-line" role="alert" hidden></p>
+    </div>
+
+    <div class="stack gap-6">
+      <p class="hint">Enter the number on the polaroid.</p>
+      <div class="picks">
+        <label class="pick" for="pick-best">
+          <span class="pick__text">
+            <span class="pick__name">Best</span>
+            <span id="pick-best-error" class="error-line" role="alert" hidden></span>
+          </span>
+          <span class="sticker">
+            <span class="sticker__hash" aria-hidden="true">#</span>
+            <input id="pick-best" class="sticker__input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" placeholder="–" data-pick="best" aria-describedby="pick-best-error">
+          </span>
+        </label>
+        <label class="pick" for="pick-favorite">
+          <span class="pick__text">
+            <span class="pick__name">Favorite</span>
+            <span id="pick-favorite-error" class="error-line" role="alert" hidden></span>
+          </span>
+          <span class="sticker">
+            <span class="sticker__hash" aria-hidden="true">#</span>
+            <input id="pick-favorite" class="sticker__input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" placeholder="–" data-pick="favorite" aria-describedby="pick-favorite-error">
+          </span>
+        </label>
+        <label class="pick" for="pick-most_discount">
+          <span class="pick__text">
+            <span class="pick__name">Most discount</span>
+            <span id="pick-most_discount-error" class="error-line" role="alert" hidden></span>
+          </span>
+          <span class="sticker">
+            <span class="sticker__hash" aria-hidden="true">#</span>
+            <input id="pick-most_discount" class="sticker__input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" placeholder="–" data-pick="most_discount" aria-describedby="pick-most_discount-error">
+          </span>
+        </label>
+        <label class="pick" for="pick-runner_up">
+          <span class="pick__text">
+            <span class="pick__name">Runner up</span>
+            <span id="pick-runner_up-error" class="error-line" role="alert" hidden></span>
+          </span>
+          <span class="sticker">
+            <span class="sticker__hash" aria-hidden="true">#</span>
+            <input id="pick-runner_up" class="sticker__input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" placeholder="–" data-pick="runner_up" aria-describedby="pick-runner_up-error">
+          </span>
+        </label>
+      </div>
+    </div>
+
+    <div class="stack gap-10 push-down">
+      <p id="form-error" class="error-line" role="alert" hidden></p>
+      <button id="cast" class="btn" type="submit" disabled>Cast ballot</button>
+      <p class="fine-print">One ballot per phone. No refunds.</p>
+    </div>
+  </form>
+</section>
+
+<section id="screen-voted" class="screen screen--roomy" hidden>
+  <header class="header-plain">
+    <p class="eyebrow">Discount Halloween</p>
+    <h1 class="display display--88 display--orange">Voted.</h1>
+    <p class="lede">Results show up here when the host closes voting.</p>
+  </header>
+
+  <div class="receipt">
+    <div class="receipt__paper">
+      <div class="receipt__head">
+        <span class="receipt__title">Discount Halloween</span>
+        <span class="receipt__sub">Costume ballot · Receipt</span>
+      </div>
+      <div id="receipt-detail" class="stack gap-12">
+        <div class="receipt__line"><span>Customer</span><span id="receipt-customer"></span></div>
+        <div class="receipt__rule"></div>
+        <div id="receipt-picks" class="receipt__lines"></div>
+        <div class="receipt__rule"></div>
+        <div class="receipt__lines">
+          <div class="receipt__line"><span>Items</span><span>4</span></div>
+          <div class="receipt__line receipt__line--total"><span>Total</span><span>$0.00</span></div>
+        </div>
+      </div>
+      <p id="receipt-already" class="receipt__note" hidden>This phone already voted.</p>
+      <div class="receipt__rule"></div>
+      <p class="receipt__small">No refunds. No exchanges.<br>One ballot per phone.</p>
+    </div>
+    <div class="receipt__teeth" aria-hidden="true"></div>
+  </div>
+
+  <p class="fine-print push-down">Keep this tab open</p>
+</section>
+
+<section id="screen-results" class="screen" hidden>
+  <header class="header-tight">
+    <p class="eyebrow">Discount Halloween · Voting closed</p>
+    <h1 class="display display--64 display--orange">Results</h1>
+  </header>
+  <div id="winners" class="winners"></div>
+  <p id="results-footer" class="fine-print push-down"></p>
+</section>
+
+<section id="screen-offline" class="screen screen--roomy" hidden>
+  <header class="header-plain">
+    <p class="eyebrow">Discount Halloween</p>
+    <h1 class="display display--56">Can't reach the ballot box.</h1>
+    <p class="lede">Check your signal.</p>
+  </header>
+  <button id="retry" class="btn" type="button">Try again</button>
+</section>
+
+</main>
 </body>
 </html>

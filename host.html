@@ -11,8 +11,82 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <link rel="stylesheet" href="assets/app.css">
+<script type="module" src="assets/host.js"></script>
 </head>
 <body>
-<main class="screen"><p class="eyebrow">Discount Halloween</p></main>
+<main>
+
+<section id="screen-login" class="screen screen--roomy">
+  <header class="header-plain">
+    <p class="eyebrow">Discount Halloween</p>
+    <h1 class="display display--72">Staff<span class="display__line">only.</span></h1>
+  </header>
+
+  <form id="login-form" class="stack login-form" novalidate>
+    <label class="field" for="host-password">
+      <span class="eyebrow">Host password</span>
+      <input id="host-password" class="field__input" type="password" autocomplete="current-password" required placeholder="••••••••">
+    </label>
+    <button id="unlock" class="btn" type="submit">Unlock</button>
+    <p id="login-error" class="error-line" role="alert" hidden></p>
+  </form>
+
+  <p class="fine-print push-down">Employees must wash hands</p>
+</section>
+
+<section id="screen-dash" class="screen screen--dash" hidden>
+  <header class="header-tight">
+    <p class="eyebrow">Discount Halloween</p>
+    <div class="host-title">
+      <h1 class="display display--56">Host</h1>
+      <span id="status-pill" class="pill">
+        <span class="pill__dot" aria-hidden="true"></span><span id="status-text"></span>
+      </span>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><span id="stat-ballots" class="stat__value"></span><span class="label">Ballots</span></div>
+    <div class="stat"><span id="stat-board" class="stat__value"></span><span class="label">On the board</span></div>
+    <div class="stat"><span id="stat-flagged" class="stat__value"></span><span class="label">Flagged</span></div>
+  </div>
+
+  <div class="actions">
+    <button id="open-voting" class="btn btn--tall" type="button" hidden>Open voting</button>
+    <button id="close-voting" class="btn btn--tall" type="button" hidden>Close voting</button>
+    <button id="confirm-close" class="btn btn--confirm" type="button" hidden>Tap again to close</button>
+    <button id="cancel-close" class="link-button" type="button" hidden>Cancel</button>
+    <button id="reopen-voting" class="btn btn--ghost" type="button" hidden>Reopen voting</button>
+    <p id="action-helper" class="helper" hidden></p>
+    <p id="action-error" class="error-line" role="alert" hidden></p>
+  </div>
+
+  <section class="section section--results">
+    <div class="section__head">
+      <h2 class="section__title">Live results</h2>
+      <span class="label">Only you see this</span>
+    </div>
+    <div id="live-results" class="stack gap-20"></div>
+  </section>
+
+  <section id="flag-section" class="section" hidden>
+    <h2 class="section__title section__title--flag">Same phone?</h2>
+    <div id="flag-groups" class="flag-groups"></div>
+    <p class="helper">These ballots look like they came from one phone. To toss one, type x in its Void cell in the Sheet.</p>
+    <a id="sheet-link" class="sheet-link" target="_blank" rel="noopener" hidden>Open the Sheet</a>
+  </section>
+
+  <section class="section">
+    <div class="section__head">
+      <h2 class="section__title">Ballots</h2>
+      <span class="label">Best · Fav · Disc · Runner</span>
+    </div>
+    <div id="ballot-rows" class="rows"></div>
+  </section>
+
+  <p id="updated" class="fine-print"></p>
+</section>
+
+</main>
 </body>
 </html>
