@@ -13,11 +13,15 @@ export const IS_MOCK = new URLSearchParams(location.search).get('mock') === '1';
 
 const TIMEOUT_MS = 30000;
 
-async function request(url, init) {
+// A vote may queue behind others for the server's lock. This must stay longer than
+// LOCK_WAIT_MS in Code.gs, or a phone gives up on a vote the server then accepts.
+const VOTE_TIMEOUT_MS = 100000;
+
+async function request(url, init, timeoutMs = TIMEOUT_MS) {
   if (!/^https?:\/\//.test(API_URL)) throw new Error('API_URL is not set in assets/config.js');
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, { ...init, signal: controller.signal });
     return await response.json();
@@ -28,7 +32,7 @@ async function request(url, init) {
 
 const live = {
   getState: () => request(`${API_URL}?action=state`),
-  post: (payload) => request(API_URL, { method: 'POST', body: JSON.stringify(payload) }),
+  post: (payload, timeoutMs) => request(API_URL, { method: 'POST', body: JSON.stringify(payload) }, timeoutMs),
 };
 
 const backend = IS_MOCK
@@ -46,7 +50,7 @@ export async function getState() {
 }
 
 export async function vote({ name, picks, deviceId, fingerprint, userAgent }) {
-  return (await backend).post({ action: 'vote', name, picks, deviceId, fingerprint, userAgent });
+  return (await backend).post({ action: 'vote', name, picks, deviceId, fingerprint, userAgent }, VOTE_TIMEOUT_MS);
 }
 
 export async function host(password) {

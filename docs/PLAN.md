@@ -120,7 +120,7 @@ While `SOON` or `OPEN`, the response must contain no counts of any kind, not eve
   "deviceId": "5b0e9c1a-…", "fingerprint": "a91c04d2e8b37f10", "userAgent": "Mozilla/5.0 …" }
 ```
 
-It returns `{ "ok": true, "ballotId": "b_7f3c…", "submittedAt": "…" }`. The server checks, in this order, inside `LockService.getScriptLock().waitLock(10000)`:
+It returns `{ "ok": true, "ballotId": "b_7f3c…", "submittedAt": "…" }`. The server checks, in this order, inside `LockService.getScriptLock().waitLock(90000)` (10 s rejected 23 of 30 simultaneous votes in live testing):
 
 1. `status` is `OPEN`. Otherwise return `not_open` (`SOON`) or `closed` (`CLOSED`).
 2. `deviceId` is a UUID and `fingerprint` is 1–64 hex characters. Otherwise return `bad_request`.

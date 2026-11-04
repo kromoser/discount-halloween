@@ -4,6 +4,7 @@
 
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { loadCode, source } from './load-code.mjs';
 import { fakeAppsScript } from './fake-apps-script.mjs';
 
@@ -195,11 +196,11 @@ describe('POST vote', () => {
     assert.equal(post({ action: 'host', password: PASSWORD }).ballots[0].name, '=HYPERLINK("x")');
   });
 
-  test('holds the lock for 10 s, flushes before releasing, and always releases', () => {
+  test('waits up to 90 s for the lock, flushes before releasing, and always releases', () => {
     open();
     const flushesBefore = env.spy.flushes;
     post(ballot());
-    assert.deepEqual(env.spy.lockWaits, [10000]);
+    assert.deepEqual(env.spy.lockWaits, [90000]);
     assert.equal(env.spy.flushes, flushesBefore + 1);
     assert.equal(env.spy.lockHeld, false);
 
@@ -392,5 +393,14 @@ describe('Apps Script compatibility', () => {
     assert.equal(/\bpassword\s*[:=]\s*['"]/i.test(code_only), false);
     assert.match(source, /const PASSWORD_PROPERTY = 'HOST_PASSWORD';/);
     assert.match(source, /getProperty\(PASSWORD_PROPERTY\)/);
+  });
+
+  // Otherwise a phone gives up on a vote the server then accepts, and the guest's
+  // retry gets already_voted instead of a receipt.
+  test('a phone waits longer for a vote than the server waits for the lock', () => {
+    const api = readFileSync(new URL('../assets/api.js', import.meta.url), 'utf8');
+    const lockMs = Number(source.match(/const LOCK_WAIT_MS = (\d+);/)[1]);
+    const voteMs = Number(api.match(/const VOTE_TIMEOUT_MS = (\d+);/)[1]);
+    assert.ok(voteMs > lockMs, `VOTE_TIMEOUT_MS ${voteMs} must exceed LOCK_WAIT_MS ${lockMs}`);
   });
 });

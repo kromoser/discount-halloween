@@ -45,7 +45,10 @@ const PASSWORD_PROPERTY = 'HOST_PASSWORD';
 // fingerprint that happens to be all digits, into a number or a date.
 const TEXT_COLUMNS = ['ballot_id', 'submitted_at', 'name', 'device_id', 'fingerprint', 'user_agent'];
 
-const LOCK_WAIT_MS = 10000;
+// A vote holds the lock for about 1.5 s on the live Sheet, so 30 at once need about 45 s
+// to clear. Live testing with 10 s rejected 23 of 30. VOTE_TIMEOUT_MS in assets/api.js
+// must stay longer than this, or a phone gives up on a vote the server then accepts.
+const LOCK_WAIT_MS = 90000;
 const STATE_CACHE_KEY = 'state';
 const STATE_CACHE_SECONDS = 10;
 const FAILURE_CACHE_KEY = 'host_password_failures';
