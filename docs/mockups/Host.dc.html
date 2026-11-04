@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Host dashboard</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+body{margin:0;background:#121010}
+a{color:#ff6a13}a:hover{color:#ffd60a}
+button{cursor:pointer}
+button:focus-visible{outline:2px solid #ffd60a;outline-offset:3px}
+</style>
+</helmet>
+<div style="width: 390px; height: 1720px; box-sizing: border-box; padding: 32px 20px 32px; background: #121010; color: #f3efe8; font-family: Archivo, system-ui, sans-serif; font-size: 16px; line-height: 1.4; display: flex; flex-direction: column; gap: 32px">
+
+  <header style="display: flex; flex-direction: column; gap: 8px">
+    <p style="margin: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a918a">Discount Halloween</p>
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+      <h1 style="margin: 0; font-family: Anton, Impact, 'Arial Narrow', sans-serif; font-weight: 400; font-size: 56px; line-height: 0.9; text-transform: uppercase; color: #f3efe8">Host</h1>
+      <span style="display: flex; align-items: center; gap: 8px; border: 2px solid {{pillBorder}}; padding: 6px 12px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #f3efe8">
+        <span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; background: {{dot}}"></span>{{statusText}}
+      </span>
+    </div>
+  </header>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 2px solid #2c2725; border-bottom: 2px solid #2c2725">
+    <div style="display: flex; flex-direction: column; gap: 2px; padding: 12px 0">
+      <span style="font-family: Anton, Impact, sans-serif; font-size: 40px; line-height: 1; font-variant-numeric: tabular-nums">{{count}}</span>
+      <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a918a">Ballots</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 2px; padding: 12px 0 12px 14px; border-left: 2px solid #2c2725">
+      <span style="font-family: Anton, Impact, sans-serif; font-size: 40px; line-height: 1; font-variant-numeric: tabular-nums">30</span>
+      <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a918a">On the board</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 2px; padding: 12px 0 12px 14px; border-left: 2px solid #2c2725">
+      <span style="font-family: Anton, Impact, sans-serif; font-size: 40px; line-height: 1; font-variant-numeric: tabular-nums; color: {{flagColor}}">{{flagCount}}</span>
+      <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a918a">Flagged</span>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 10px">
+    <sc-if value="{{isOpen}}" hint-placeholder-val="{{true}}">
+      <button type="button" onClick="{{askClose}}" style="height: 60px; border: 0; background: #ff6a13; color: #141212; font-family: Anton, Impact, sans-serif; font-size: 24px; letter-spacing: 0.02em; text-transform: uppercase">Close voting</button>
+      <p style="margin: 0; color: #9a918a; font-size: 14px">Closing shows results on every guest's phone.</p>
+    </sc-if>
+    <sc-if value="{{isConfirm}}" hint-placeholder-val="{{false}}">
+      <button type="button" onClick="{{close}}" style="height: 60px; border: 0; background: #ffd60a; color: #141212; font-family: Anton, Impact, sans-serif; font-size: 22px; letter-spacing: 0.02em; text-transform: uppercase">Tap again to close</button>
+      <button type="button" onClick="{{cancel}}" style="align-self: flex-start; background: none; border: 0; padding: 4px 0; color: #9a918a; font: inherit; font-size: 14px; text-decoration: underline">Cancel</button>
+    </sc-if>
+    <sc-if value="{{isClosed}}" hint-placeholder-val="{{false}}">
+      <button type="button" onClick="{{reopen}}" style="height: 60px; background: transparent; border: 2px solid #3a3431; color: #f3efe8; font-family: Anton, Impact, sans-serif; font-size: 22px; letter-spacing: 0.02em; text-transform: uppercase">Reopen voting</button>
+      <p style="margin: 0; color: #9a918a; font-size: 14px">Guests now see results.</p>
+    </sc-if>
+  </div>
+
+  <section style="display: flex; flex-direction: column; gap: 20px">
+    <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px">
+      <h2 style="margin: 0; font-family: Anton, Impact, sans-serif; font-weight: 400; font-size: 30px; line-height: 1; text-transform: uppercase">Live results</h2>
+      <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a918a">Only you see this</span>
+    </div>
+    <sc-for list="{{results}}" as="cat" hint-placeholder-count="4">
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #f3efe8">{{cat.label}}</span>
+        <sc-for list="{{cat.rows}}" as="r" hint-placeholder-count="3">
+          <div style="display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums">
+            <span style="width: 40px; font-family: Anton, Impact, sans-serif; font-size: 20px; line-height: 1; color: {{r.ink}}">{{r.num}}</span>
+            <span style="flex: 1; height: 14px; background: #2c2725; display: flex">
+              <span style="width: {{r.width}}; height: 100%; background: {{r.fill}}"></span>
+            </span>
+            <span style="width: 24px; text-align: right; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 14px; font-weight: 600; color: {{r.ink}}">{{r.votes}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </sc-for>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 12px">
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <h2 style="margin: 0; font-family: Anton, Impact, sans-serif; font-weight: 400; font-size: 30px; line-height: 1; text-transform: uppercase; color: #ffd60a">Same phone?</h2>
+      <p style="margin: 0; color: #9a918a; font-size: 14px">These ballots look like they came from one phone. Toss any that don't count.</p>
+    </div>
+    <div style="display: flex; flex-direction: column; border-top: 2px solid #2c2725">
+      <sc-for list="{{flagged}}" as="b" hint-placeholder-count="2">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 2px solid #2c2725; opacity: {{b.opacity}}">
+          <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+            <span style="font-weight: 600; text-decoration: {{b.strike}}">{{b.name}}</span>
+            <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; color: #9a918a; font-variant-numeric: tabular-nums">{{b.time}} · {{b.picksText}}</span>
+          </div>
+          <button type="button" onClick="{{b.toggle}}" style="flex: none; min-width: 72px; height: 44px; background: transparent; border: 2px solid #3a3431; color: #f3efe8; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase">{{b.action}}</button>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 12px">
+    <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px">
+      <h2 style="margin: 0; font-family: Anton, Impact, sans-serif; font-weight: 400; font-size: 30px; line-height: 1; text-transform: uppercase">Ballots</h2>
+      <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a918a">Best · Fav · Disc · Runner</span>
+    </div>
+    <div style="display: flex; flex-direction: column; border-top: 2px solid #2c2725">
+      <sc-for list="{{ballots}}" as="b" hint-placeholder-count="6">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 2px solid #2c2725; opacity: {{b.opacity}}">
+          <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+            <span style="display: flex; align-items: center; gap: 8px">
+              <span style="font-weight: 600; text-decoration: {{b.strike}}">{{b.name}}</span>
+              <sc-if value="{{b.flag}}" hint-placeholder-val="{{false}}">
+                <span style="background: #ffd60a; color: #141212; padding: 1px 6px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase">Flag</span>
+              </sc-if>
+            </span>
+            <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; color: #9a918a; font-variant-numeric: tabular-nums">{{b.time}} · {{b.picksText}}</span>
+          </div>
+          <button type="button" onClick="{{b.toggle}}" style="flex: none; min-width: 72px; height: 44px; background: transparent; border: 2px solid #3a3431; color: #f3efe8; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase">{{b.action}}</button>
+        </div>
+      </sc-for>
+    </div>
+    <p style="margin: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a918a">Newest 6 of {{count}} · Example data</p>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1720}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { phase: 'open', tossed: {} };
+  }
+  renderVals() {
+    const s = this.state;
+    const base = {
+      best: { 12: 11, 4: 7, 19: 5 },
+      favorite: { 7: 9, 12: 8, 25: 4 },
+      discount: { 21: 13, 9: 6, 2: 3 },
+      runner: { 3: 6, 18: 6, 12: 4 }
+    };
+    const keys = ['best', 'favorite', 'discount', 'runner'];
+    const labels = { best: 'Best', favorite: 'Favorite', discount: 'Most discount', runner: 'Runner up' };
+    const raw = [
+      { id: 'b6', name: 'Theo', time: '9:45 PM', picks: [12, 12, 2, 18], flag: false },
+      { id: 'b5', name: 'Dana', time: '9:44 PM', picks: [12, 7, 21, 3], flag: true },
+      { id: 'b4', name: 'Jules', time: '9:42 PM', picks: [19, 25, 21, 12], flag: false },
+      { id: 'b3', name: 'Dana R.', time: '9:41 PM', picks: [12, 7, 21, 3], flag: true },
+      { id: 'b2', name: 'Priya', time: '9:39 PM', picks: [12, 7, 9, 3], flag: false },
+      { id: 'b1', name: 'Marcus', time: '9:38 PM', picks: [4, 12, 21, 18], flag: false }
+    ];
+    const counts = {};
+    keys.forEach((k) => { counts[k] = Object.assign({}, base[k]); });
+    let tossedN = 0;
+    raw.forEach((b) => {
+      if (!s.tossed[b.id]) return;
+      tossedN += 1;
+      keys.forEach((k, i) => { if (counts[k][b.picks[i]] != null) counts[k][b.picks[i]] -= 1; });
+    });
+    const total = 27 - tossedN;
+    const results = keys.map((k) => {
+      const entries = Object.keys(counts[k]).map((n) => ({ n: Number(n), v: counts[k][n] })).sort((a, b) => b.v - a.v);
+      const top = entries.length ? entries[0].v : 0;
+      return {
+        label: labels[k],
+        rows: entries.slice(0, 3).map((e) => {
+          const lead = e.v === top && top > 0;
+          return {
+            num: '#' + e.n,
+            votes: String(e.v),
+            width: (total ? Math.round((e.v / total) * 100) : 0) + '%',
+            fill: lead ? '#ff6a13' : '#6b625d',
+            ink: lead ? '#f3efe8' : '#9a918a'
+          };
+        })
+      };
+    });
+    const rows = raw.map((b) => {
+      const t = !!s.tossed[b.id];
+      return {
+        name: b.name,
+        time: b.time,
+        flag: b.flag,
+        picksText: b.picks.join(' · '),
+        opacity: t ? 0.45 : 1,
+        strike: t ? 'line-through' : 'none',
+        action: t ? 'Undo' : 'Toss',
+        toggle: () => this.setState({ tossed: Object.assign({}, this.state.tossed, { [b.id]: !t }) })
+      };
+    });
+    const flagCount = raw.filter((b) => b.flag && !s.tossed[b.id]).length;
+    const closed = s.phase === 'closed';
+    return {
+      count: String(total),
+      flagCount: String(flagCount),
+      flagColor: flagCount > 0 ? '#ffd60a' : '#f3efe8',
+      statusText: closed ? 'Closed' : 'Voting open',
+      dot: closed ? '#6b625d' : '#ff6a13',
+      pillBorder: closed ? '#3a3431' : '#ff6a13',
+      isOpen: s.phase === 'open',
+      isConfirm: s.phase === 'confirm',
+      isClosed: closed,
+      askClose: () => this.setState({ phase: 'confirm' }),
+      close: () => this.setState({ phase: 'closed' }),
+      cancel: () => this.setState({ phase: 'open' }),
+      reopen: () => this.setState({ phase: 'open' }),
+      results: results,
+      flagged: rows.filter((r) => r.flag),
+      ballots: rows
+    };
+  }
+}
+</script>
+</body>
+</html>

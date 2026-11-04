@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Host login</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+body{margin:0;background:#121010}
+a{color:#ff6a13}a:hover{color:#ffd60a}
+input{outline:none}
+.pw:focus{border-bottom-color:#ff6a13}
+.pw::placeholder{color:#7a716b;opacity:1}
+input:focus-visible,a:focus-visible{outline:2px solid #ffd60a;outline-offset:3px}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; padding: 32px 20px 24px; background: #121010; color: #f3efe8; font-family: Archivo, system-ui, sans-serif; font-size: 16px; line-height: 1.4; display: flex; flex-direction: column; gap: 28px">
+  <header style="display: flex; flex-direction: column; gap: 10px">
+    <p style="margin: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a918a">Discount Halloween</p>
+    <h1 style="margin: 0; font-family: Anton, Impact, 'Arial Narrow', sans-serif; font-weight: 400; font-size: 72px; line-height: 0.9; text-transform: uppercase; color: #f3efe8">Staff<span style="display: block; color: #ff6a13">only.</span></h1>
+  </header>
+
+  <form style="display: flex; flex-direction: column; gap: 20px">
+    <label for="host-password" style="display: flex; flex-direction: column; gap: 4px">
+      <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a918a">Host password</span>
+      <input id="host-password" class="pw" type="password" autocomplete="current-password" placeholder="••••••••" style="font-family: Archivo, system-ui, sans-serif; font-size: 20px; color: #f3efe8; background: transparent; border: 0; border-bottom: 2px solid #3a3431; border-radius: 0; padding: 6px 0">
+    </label>
+    <a href="Host.dc.html" style="display: flex; align-items: center; justify-content: center; height: 56px; background: #ff6a13; color: #141212; font-family: Anton, Impact, sans-serif; font-size: 22px; letter-spacing: 0.02em; text-transform: uppercase; text-decoration: none">Unlock</a>
+    <p style="margin: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; letter-spacing: 0.04em; color: #ffd60a">Wrong password. Try again.</p>
+  </form>
+
+  <p style="margin: 0; margin-top: auto; text-align: center; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a918a">Employees must wash hands</p>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

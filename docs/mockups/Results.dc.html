@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Results</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+body{margin:0;background:#121010}
+a{color:#ff6a13}a:hover{color:#ffd60a}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; padding: 32px 20px 24px; background: #121010; color: #f3efe8; font-family: Archivo, system-ui, sans-serif; font-size: 16px; line-height: 1.4; display: flex; flex-direction: column; gap: 22px">
+  <header style="display: flex; flex-direction: column; gap: 8px">
+    <p style="margin: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a918a">Discount Halloween · Voting closed</p>
+    <h1 style="margin: 0; font-family: Anton, Impact, 'Arial Narrow', sans-serif; font-weight: 400; font-size: 64px; line-height: 0.9; text-transform: uppercase; color: #ff6a13">Results</h1>
+  </header>
+
+  <div style="display: flex; flex-direction: column; gap: 12px">
+    <sc-for list="{{winners}}" as="w" hint-placeholder-count="4">
+      <div style="background: #f7f4ee; color: #141212; display: flex; flex-direction: column">
+        <div style="background: #ff6a13; padding: 6px 12px; display: flex; justify-content: space-between; gap: 12px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase">
+          <span>{{w.label}}</span><span>{{w.tag}}</span>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 14px 12px">
+          <span style="font-family: Anton, Impact, sans-serif; font-size: 64px; line-height: 1; text-transform: uppercase; font-variant-numeric: tabular-nums; white-space: nowrap">{{w.number}}</span>
+          <span style="flex: none; background: #ffd60a; color: #141212; border-radius: 999px; padding: 6px 12px; transform: rotate(6deg); font-family: Anton, Impact, sans-serif; font-size: 18px; line-height: 1.1; font-variant-numeric: tabular-nums">{{w.votes}}</span>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <p style="margin: 0; margin-top: auto; text-align: center; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a918a">27 ballots · Winners, find the host</p>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      winners: [
+        { label: 'Best', tag: 'Winner', number: '#12', votes: '11 votes' },
+        { label: 'Favorite', tag: 'Winner', number: '#7', votes: '9 votes' },
+        { label: 'Most discount', tag: 'Winner', number: '#21', votes: '13 votes' },
+        { label: 'Runner up', tag: 'Tie', number: '#3 & #18', votes: '6 each' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
