@@ -196,11 +196,11 @@ describe('POST vote', () => {
     assert.equal(post({ action: 'host', password: PASSWORD }).ballots[0].name, '=HYPERLINK("x")');
   });
 
-  test('waits up to 90 s for the lock, flushes before releasing, and always releases', () => {
+  test('tries for the lock in 1 s attempts, flushes before releasing, and always releases', () => {
     open();
     const flushesBefore = env.spy.flushes;
     post(ballot());
-    assert.deepEqual(env.spy.lockWaits, [90000]);
+    assert.deepEqual(env.spy.lockTries, [1000]);
     assert.equal(env.spy.flushes, flushesBefore + 1);
     assert.equal(env.spy.lockHeld, false);
 
@@ -212,10 +212,20 @@ describe('POST vote', () => {
     assert.equal(env.spy.lockHeld, false, 'released after an exception');
   });
 
-  test('a lock timeout is a server_error, and adds no row', () => {
+  test('keeps trying while the lock is busy, then saves the vote', () => {
+    open();
+    env.spy.lockBusyTries = 5;
+    assert.equal(post(ballot()).ok, true);
+    assert.equal(env.spy.lockTries.length, 6);
+    assert.equal(votes().rows.length, 2);
+    assert.equal(env.spy.lockHeld, false);
+  });
+
+  test('gives up after 75 s as a server_error, and adds no row', () => {
     open();
     env.spy.lockTimesOut = true;
     assert.equal(post(ballot()).error, 'server_error');
+    assert.equal(env.spy.clockMs, 75000);
     assert.equal(votes().rows.length, 1);
     assert.equal(env.spy.lockReleases, 0, 'a lock never held is not released');
   });
@@ -397,10 +407,11 @@ describe('Apps Script compatibility', () => {
 
   // Otherwise a phone gives up on a vote the server then accepts, and the guest's
   // retry gets already_voted instead of a receipt.
-  test('a phone waits longer for a vote than the server waits for the lock', () => {
+  // Live, a vote answered 12 s after its lock wait should have ended, so a bare "longer" isn't enough.
+  test('a phone waits at least 20 s longer for a vote than the server waits for the lock', () => {
     const api = readFileSync(new URL('../assets/api.js', import.meta.url), 'utf8');
     const lockMs = Number(source.match(/const LOCK_WAIT_MS = (\d+);/)[1]);
     const voteMs = Number(api.match(/const VOTE_TIMEOUT_MS = (\d+);/)[1]);
-    assert.ok(voteMs > lockMs, `VOTE_TIMEOUT_MS ${voteMs} must exceed LOCK_WAIT_MS ${lockMs}`);
+    assert.ok(voteMs - lockMs >= 20000, `VOTE_TIMEOUT_MS ${voteMs} must be 20 s past LOCK_WAIT_MS ${lockMs}`);
   });
 });

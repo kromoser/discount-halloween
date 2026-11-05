@@ -87,7 +87,9 @@ export function fakeAppsScript({ password = 'correct horse' } = {}) {
   const cache = new Map();
   const properties = new Map(password ? [['HOST_PASSWORD', password]] : []);
   const spy = {
-    lockWaits: [],
+    lockTries: [],
+    lockBusyTries: 0,
+    clockMs: 0,
     lockHeld: false,
     lockReleases: 0,
     flushes: 0,
@@ -131,10 +133,15 @@ export function fakeAppsScript({ password = 'correct horse' } = {}) {
     },
     LockService: {
       getScriptLock: () => ({
-        waitLock: (ms) => {
-          spy.lockWaits.push(ms);
-          if (spy.lockTimesOut) throw new Error('Lock timeout');
+        tryLock: (ms) => {
+          spy.lockTries.push(ms);
+          if (spy.lockTimesOut || spy.lockBusyTries > 0) {
+            spy.lockBusyTries -= 1;
+            spy.clockMs += ms;
+            return false;
+          }
           spy.lockHeld = true;
+          return true;
         },
         releaseLock: () => { spy.lockHeld = false; spy.lockReleases += 1; },
       }),
@@ -168,6 +175,10 @@ export function fakeAppsScript({ password = 'correct horse' } = {}) {
       formatDate: (date) => date.toISOString().replace('Z', '-04:00').replace(/\.\d+/, ''),
     },
     Session: { getScriptTimeZone: () => 'America/New_York' },
+    // A failed lock attempt moves this clock on, so the 75 s limit doesn't take 75 s to test.
+    Date: class extends Date {
+      static now() { return Date.now() + spy.clockMs; }
+    },
     console: {
       log: () => {},
       error: (...args) => { spy.errors.push(args); },

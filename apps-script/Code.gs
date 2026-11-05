@@ -45,10 +45,11 @@ const PASSWORD_PROPERTY = 'HOST_PASSWORD';
 // fingerprint that happens to be all digits, into a number or a date.
 const TEXT_COLUMNS = ['ballot_id', 'submitted_at', 'name', 'device_id', 'fingerprint', 'user_agent'];
 
-// A vote holds the lock for about 1.5 s on the live Sheet, so 30 at once need about 45 s
-// to clear. Live testing with 10 s rejected 23 of 30. VOTE_TIMEOUT_MS in assets/api.js
-// must stay longer than this, or a phone gives up on a vote the server then accepts.
-const LOCK_WAIT_MS = 90000;
+// A vote holds the lock for about 1.3 s on the live Sheet, so 30 at once clear in about
+// 40 s. VOTE_TIMEOUT_MS in assets/api.js must stay at least 20 s past this limit, or a
+// phone gives up on a vote the server then accepts: live, one answered 12 s past its wait.
+const LOCK_WAIT_MS = 75000;
+const LOCK_TRY_MS = 1000;
 const STATE_CACHE_KEY = 'state';
 const STATE_CACHE_SECONDS = 10;
 const FAILURE_CACHE_KEY = 'host_password_failures';
@@ -341,9 +342,18 @@ function handleState_() {
   return json;
 }
 
+// Short attempts rather than one long waitLock: live, with waitLock(90000), the lock sat
+// free for a minute while 3 votes still waited, and 2 of them timed out.
+function acquireLock_(lock) {
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  while (!lock.tryLock(LOCK_TRY_MS)) {
+    if (Date.now() >= deadline) throw new Error('Timed out waiting for the lock');
+  }
+}
+
 function handleVote_(body) {
   const lock = LockService.getScriptLock();
-  lock.waitLock(LOCK_WAIT_MS);
+  acquireLock_(lock);
   try {
     const result = checkVote(readSettings_(), readVotes_(), body);
     if (!result.ok) {
