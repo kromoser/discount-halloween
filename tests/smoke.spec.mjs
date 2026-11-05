@@ -48,6 +48,17 @@ test.afterEach(async ({ page }) => {
 });
 
 test.describe('guest page', () => {
+  test('the logo loads, fills the column, and names the party for screen readers', async ({ page }) => {
+    await openGuest(page);
+    await expect(screen(page, 'ballot')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Discount Halloween', exact: true })).toBeVisible();
+    const logo = page.locator('#screen-ballot .logo img');
+    await expect.poll(() => logo.evaluate((img) => img.naturalWidth)).toBeGreaterThan(0);
+    const box = await logo.boundingBox();
+    expect(box.width).toBe(350);
+    expect(box.height).toBeLessThan(170);
+  });
+
   test('walks Soon, Ballot, Voted, Results, and a reload keeps the right screen', async ({ page }) => {
     await openGuest(page, 'SOON');
     await expect(screen(page, 'soon')).toBeVisible();

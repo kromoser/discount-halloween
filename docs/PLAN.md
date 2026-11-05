@@ -232,7 +232,7 @@ Match the mockups in `docs/mockups/` (one `.dc.html` file per screen; the origin
 | `--paper-ink` | `#141212` | Text on paper, orange and yellow |
 | `--paper-dim` | `#4a4441` | Secondary text on paper |
 | `--orange` | `#ff6a13` | Primary buttons, bands, leading bars |
-| `--sticker` | `#ffd60a` | Filled number stickers, logo tag, flags, errors |
+| `--sticker` | `#ffd60a` | Filled number stickers, logo letters, flags, errors |
 
 **Type:** load from Google Fonts with `display=swap`.
 
@@ -243,7 +243,7 @@ Match the mockups in `docs/mockups/` (one `.dc.html` file per screen; the origin
 
 **Components**
 
-- **Logo tag** (Ballot, Soon and Loading screens): "Discount / Halloween" in Anton on a yellow price tag. The left end is pointed with `clip-path: polygon(28px 0,100% 0,100% 100%,28px 100%,0 50%)`, it has a 12 px punched hole in `--bg`, and an orange 64 px "70% off" sticker overlaps the top-right corner at 14°. The whole tag is rotated −3°. Other screens use a mono eyebrow "Discount Halloween" instead.
+- **Logo** (Ballot, Soon and Loading screens): `assets/logo.svg`, all outlines, so it needs no web font. "Discount" and "Halloween" are stacked into one shape: bouncing Spicy Rice letters in `--sticker`, with a dark outline, a thin `--orange` outer outline and four-point sparkles above and below. An orange "70% off" sticker in Anton sits over the bottom-right corner. It fills the column width. This replaces the price tag in the mockups. Other screens use a mono eyebrow "Discount Halloween" instead.
 - **Number sticker:** a 70 px circle rotated −7°. Empty, it has a 2 px dashed `--bar-muted` ring and an en-dash placeholder. Valid, it's solid `--sticker` with `--paper-ink` digits. Invalid, the dashed ring turns `--sticker` and the error line shows. The input sits inside the circle in Anton at 32 px.
 - **Primary button:** a 56 px tall `--orange` block with Anton 22 px uppercase in `--paper-ink`. Disabled is 35% opacity.
 - **Receipt** (Voted): a `--paper` slip 300 px wide, rotated −1.2°, set in mono 13 px with dashed dividers and a sawtooth bottom edge. Lines: Customer, the four picks, Items 4, Total $0.00, "No refunds. No exchanges. One ballot per phone."
