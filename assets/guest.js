@@ -95,6 +95,24 @@ function saveBallot(ballot) {
   writeStored(BALLOT_KEY, JSON.stringify(ballot));
 }
 
+function forgetBallot() {
+  state.ballot = null;
+  memory.delete(BALLOT_KEY);
+  try {
+    localStorage.removeItem(BALLOT_KEY);
+  } catch {
+    // Storage blocked: the in-memory copy was all there was.
+  }
+}
+
+// How a phone that has voted asks whether the host unlocked it. A receipt's ballot ID is
+// exact, so a new ballot can't be mistaken for the old one. A phone told "already voted"
+// has only its device ID. Every other phone asks nothing.
+function unlockRef() {
+  if (!state.ballot) return undefined;
+  return state.ballot.ballotId || deviceId();
+}
+
 /* ---------- State ---------- */
 
 const state = {
@@ -304,6 +322,22 @@ function renderReceipt() {
   );
 }
 
+// Back to the form, filled in with what they sent, so fixing one pick doesn't mean a
+// walk back to the board for the other three.
+function reopenBallot() {
+  const { name = '', picks = {} } = state.ballot;
+  forgetBallot();
+  nameInput.value = name;
+  fields.forEach((field) => {
+    const pick = picks[field.key];
+    field.input.value = pick === undefined ? '' : String(pick);
+    field.typedNonDigit = false;
+    field.rejected = false;
+  });
+  $('reopened-note').hidden = false;
+  updateForm();
+}
+
 function winnerCard(result) {
   const count = result.winners.length;
   const tie = count > 1;
@@ -374,10 +408,11 @@ function applyState(res) {
 async function refresh() {
   latestRequest += 1;
   const request = latestRequest;
+  const ref = unlockRef();
 
   let res = null;
   try {
-    res = await getState();
+    res = await getState(ref);
   } catch {
     // Counted as a failure below.
   }
@@ -387,6 +422,8 @@ async function refresh() {
 
   if (res && res.ok) {
     failures = 0;
+    // The ref must still match: by now this answer may be about an older ballot.
+    if (res.unlocked && ref && ref === unlockRef()) reopenBallot();
     applyState(res);
     render();
     return;

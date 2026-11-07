@@ -31,7 +31,7 @@ async function request(url, init, timeoutMs = TIMEOUT_MS) {
 }
 
 const live = {
-  getState: () => request(`${API_URL}?action=state`),
+  getState: (ref) => request(`${API_URL}?action=state${ref ? `&ref=${encodeURIComponent(ref)}` : ''}`),
   post: (payload, timeoutMs) => request(API_URL, { method: 'POST', body: JSON.stringify(payload) }, timeoutMs),
 };
 
@@ -45,8 +45,9 @@ const backend = IS_MOCK
 // Each call resolves to the backend's JSON, including { ok: false, ... } errors.
 // It rejects only when no usable response came back.
 
-export async function getState() {
-  return (await backend).getState();
+// `ref` is how a phone that has voted asks whether the host has unlocked it.
+export async function getState(ref) {
+  return (await backend).getState(ref);
 }
 
 export async function vote({ name, picks, deviceId, fingerprint, userAgent }) {
@@ -59,4 +60,8 @@ export async function host(password) {
 
 export async function setStatus(password, status) {
   return (await backend).post({ action: 'setStatus', password, status });
+}
+
+export async function unlockBallot(password, ballotId) {
+  return (await backend).post({ action: 'unlock', password, ballotId });
 }

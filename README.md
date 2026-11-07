@@ -30,15 +30,16 @@ Never create a second deployment, because that changes the URL and breaks both p
 
 ## Running the night
 
-Fix anything by editing the Sheet. Changes reach guests within about 30 seconds, and the host page within 10.
+Fix anything from the host page or the Sheet. Changes reach guests within about 30 seconds, and the host page within 10.
 
-| To do this | Edit this |
+| To do this | Do this |
 | --- | --- |
-| Toss a ballot | Type `x` in its `void` cell (any non-blank value counts) |
-| Change what guests see | `status` in `Settings`: `SOON`, `OPEN` or `CLOSED` |
+| Change what guests see | Tap **Soon**, **Open** or **Closed** twice on the host page, or edit `status` in `Settings` |
+| Let someone vote again | Tap **Unlock** twice on their ballot on the host page. Their old ballot stops counting right away, and their phone reopens with it filled in. Voting has to be open or soon: reopen it first if it's closed |
+| Toss a ballot | Type `x` in its `void` cell (any non-blank value other than `unlocked` works) |
 | Change the highest Polaroid number | `board_size` in `Settings` |
 
-A voided ballot's phone still can't vote again, so it stays tossed.
+A voided ballot's phone still can't vote again, so it stays tossed, unless you unlock it. Deleting a row by hand doesn't reach the phone, which keeps showing its receipt: use Unlock instead.
 
 Before the party: run a full test, delete the test rows in `Votes` (keep the header), set `status` to `SOON` and `board_size` to the real count, then print the QR code and the numbers for the Polaroids. The full checklist is in the [plan](docs/PLAN.md#acceptance-tests-and-party-night).
 

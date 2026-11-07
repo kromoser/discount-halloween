@@ -59,6 +59,37 @@ test.describe('guest page', () => {
     expect(box.height).toBeLessThan(170);
   });
 
+  test('says Costume contest, centered, under the logo', async ({ page }) => {
+    await openGuest(page, 'SOON');
+    const soon = page.locator('#screen-soon .header-logo .eyebrow');
+    await expect(soon).toHaveText('Costume contest');
+    await expect(soon).toHaveCSS('text-align', 'center');
+
+    await setStatus(page, 'OPEN');
+    await page.reload();
+    const ballot = page.locator('#screen-ballot .header-logo .eyebrow');
+    await expect(ballot).toHaveText('Costume contest · Voting open');
+    await expect(ballot).toHaveCSS('text-align', 'center');
+    await expect(page.getByText(/costume ballot/i)).toHaveCount(0);
+  });
+
+  test('the picks line matches the other labels, with room above it', async ({ page }) => {
+    await openGuest(page);
+    const line = page.getByText('Vote for one costume per category', { exact: true });
+    await expect(line).toBeVisible();
+    await expect(page.getByText(/enter the number/i)).toHaveCount(0);
+
+    const style = (node) => node.evaluate((n) => {
+      const c = getComputedStyle(n);
+      return [c.fontFamily, c.fontSize, c.fontWeight, c.letterSpacing, c.textTransform, c.color];
+    });
+    expect(await style(line)).toEqual(await style(page.getByText('Your name', { exact: true })));
+
+    const input = await page.locator('#voter-name').boundingBox();
+    const label = await line.boundingBox();
+    expect(label.y - (input.y + input.height)).toBeGreaterThanOrEqual(36);
+  });
+
   test('walks Soon, Ballot, Voted, Results, and a reload keeps the right screen', async ({ page }) => {
     await openGuest(page, 'SOON');
     await expect(screen(page, 'soon')).toBeVisible();
@@ -313,10 +344,12 @@ test.describe('connection trouble', () => {
     // Every state call fails until the test sets dh.test.online.
     await page.route('**/assets/mock-api.js', async (route) => {
       const res = await route.fetch();
-      const body = (await res.text()).replace(
-        'async getState() {',
-        "async getState() { if (!localStorage.getItem('dh.test.online')) throw new TypeError('offline');",
+      const source = await res.text();
+      const body = source.replace(
+        /async getState\([^)]*\) \{/,
+        "$& if (!localStorage.getItem('dh.test.online')) throw new TypeError('offline');",
       );
+      expect(body).not.toBe(source);
       await route.fulfill({ response: res, body });
     });
     await page.goto(GUEST);
@@ -685,87 +718,294 @@ test.describe('host dashboard', () => {
   });
 });
 
-test.describe('host status actions', () => {
-  test('SOON: one tap opens voting', async ({ page }) => {
-    await openHost(page, 'SOON');
-    await expect(page.locator('#status-text')).toHaveText('Voting soon');
-    await expect(page.locator('#close-voting')).toBeHidden();
-    await page.click('#open-voting');
-    await expect(page.locator('#status-text')).toHaveText('Voting open');
-    await expect(page.locator('#status-pill .pill__dot')).toHaveCSS('background-color', 'rgb(255, 106, 19)');
-    expect(await page.evaluate(() => window.dhMock.state().status)).toBe('OPEN');
+const statusOption = (page, value) => page.locator(`#status-control [data-value="${value}"]`);
+
+// What the host's two taps send, without opening the host page.
+async function unlockFromConsole(page, name) {
+  const res = await page.evaluate(async (n) => {
+    const mock = await import('/assets/mock-api.js');
+    const { ballotId } = window.dhMock.state().ballots.find((b) => b.name === n);
+    return mock.backend.post({ action: 'unlock', password: mock.MOCK_PASSWORD, ballotId });
+  }, name);
+  expect(res.ok).toBe(true);
+}
+
+// Two taps, with the pause that tells them apart from an accidental double-tap.
+async function chooseStatus(page, value) {
+  await statusOption(page, value).click();
+  await page.waitForTimeout(450);
+  await statusOption(page, value).click();
+}
+
+const mockStatus = (page) => page.evaluate(() => window.dhMock.state().status);
+
+test.describe('host status control', () => {
+  const ORANGE = 'rgb(255, 106, 19)';
+  const YELLOW = 'rgb(255, 214, 10)';
+
+  for (const [status, pill, helper] of [
+    ['SOON', 'Voting soon', 'Guests see "Voting opens soon."'],
+    ['OPEN', 'Voting open', 'Guests can vote.'],
+    ['CLOSED', 'Closed', 'Guests now see results.'],
+  ]) {
+    test(`${status}: shows all three choices with the current one filled`, async ({ page }) => {
+      await openHost(page, status);
+      await expect(page.locator('#status-text')).toHaveText(pill);
+      await expect(page.locator('#action-helper')).toHaveText(helper);
+      await expect(page.locator('#status-control button')).toHaveText(['Soon', 'Open', 'Closed']);
+      await expect(statusOption(page, status)).toHaveCSS('background-color', ORANGE);
+      await expect(statusOption(page, status)).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.locator('#status-control [aria-pressed="false"]')).toHaveCount(2);
+    });
+  }
+
+  for (const [from, to] of [
+    ['SOON', 'OPEN'], ['SOON', 'CLOSED'],
+    ['OPEN', 'SOON'], ['OPEN', 'CLOSED'],
+    ['CLOSED', 'OPEN'], ['CLOSED', 'SOON'],
+  ]) {
+    test(`${from} to ${to} takes two taps`, async ({ page }) => {
+      await openHost(page, from);
+      await statusOption(page, to).click();
+      expect(await mockStatus(page)).toBe(from);
+      await page.waitForTimeout(450);
+      await statusOption(page, to).click();
+      await expect(statusOption(page, to)).toHaveAttribute('aria-pressed', 'true');
+      expect(await mockStatus(page)).toBe(to);
+    });
+  }
+
+  test('the first tap asks, in yellow, and says what the second will do', async ({ page }) => {
+    await openHost(page);
+    await statusOption(page, 'CLOSED').click();
+    await expect(statusOption(page, 'CLOSED')).toHaveText('Tap again');
+    await expect(statusOption(page, 'CLOSED')).toHaveCSS('background-color', YELLOW);
+    await expect(page.locator('#action-helper')).toHaveText("Closing shows results on every guest's phone.");
+    await expect(page.locator('#status-cancel')).toBeVisible();
   });
 
-  test('OPEN: the first tap asks, the second closes', async ({ page }) => {
-    await openHost(page);
-    await expect(page.getByText("Closing shows results on every guest's phone.")).toBeVisible();
-
-    await page.click('#close-voting');
-    await expect(page.locator('#confirm-close')).toHaveText('Tap again to close');
-    await expect(page.locator('#confirm-close')).toHaveCSS('background-color', 'rgb(255, 214, 10)');
-    await expect(page.locator('#cancel-close')).toBeVisible();
-    expect(await page.evaluate(() => window.dhMock.state().status)).toBe('OPEN');
-
-    await page.waitForTimeout(450);
-    await page.click('#confirm-close');
-    await expect(page.locator('#status-text')).toHaveText('Closed');
-    expect(await page.evaluate(() => window.dhMock.state().status)).toBe('CLOSED');
+  test('each move explains itself', async ({ page }) => {
+    await openHost(page, 'CLOSED');
+    await statusOption(page, 'OPEN').click();
+    await expect(page.locator('#action-helper')).toHaveText('Results go away and guests can vote again.');
+    await statusOption(page, 'SOON').click();
+    await expect(page.locator('#action-helper')).toHaveText('Guests go back to "Voting opens soon" and can\'t vote.');
   });
 
-  test('an accidental double-tap does not close', async ({ page }) => {
+  test('an accidental double-tap changes nothing', async ({ page }) => {
     await openHost(page);
-    await page.locator('#close-voting').click();
-    await page.evaluate(() => document.getElementById('confirm-close').click());
+    await statusOption(page, 'CLOSED').click();
+    await page.evaluate(() => document.querySelector('#status-control [data-value="CLOSED"]').click());
     await page.waitForTimeout(500);
-    await expect(page.locator('#confirm-close')).toBeVisible();
-    expect(await page.evaluate(() => window.dhMock.state().status)).toBe('OPEN');
+    await expect(statusOption(page, 'CLOSED')).toHaveText('Tap again');
+    expect(await mockStatus(page)).toBe('OPEN');
   });
 
-  test('Cancel goes back without closing', async ({ page }) => {
+  test('Cancel backs out', async ({ page }) => {
     await openHost(page);
-    await page.click('#close-voting');
-    await page.click('#cancel-close');
-    await expect(page.locator('#close-voting')).toBeVisible();
-    await expect(page.locator('#confirm-close')).toBeHidden();
-    expect(await page.evaluate(() => window.dhMock.state().status)).toBe('OPEN');
+    await statusOption(page, 'CLOSED').click();
+    await page.click('#status-cancel');
+    await expect(statusOption(page, 'CLOSED')).toHaveText('Closed');
+    await expect(page.locator('#status-cancel')).toBeHidden();
+    expect(await mockStatus(page)).toBe('OPEN');
+  });
+
+  test('tapping the current status backs out too', async ({ page }) => {
+    await openHost(page);
+    await statusOption(page, 'CLOSED').click();
+    await statusOption(page, 'OPEN').click();
+    await expect(statusOption(page, 'CLOSED')).toHaveText('Closed');
+    await expect(page.locator('#status-cancel')).toBeHidden();
+    expect(await mockStatus(page)).toBe('OPEN');
+  });
+
+  test('tapping a different status moves the ask, and takes its own second tap', async ({ page }) => {
+    await openHost(page);
+    await statusOption(page, 'CLOSED').click();
+    await page.waitForTimeout(450);
+    await statusOption(page, 'SOON').click();
+    await expect(statusOption(page, 'CLOSED')).toHaveText('Closed');
+    await expect(statusOption(page, 'SOON')).toHaveText('Tap again');
+    expect(await mockStatus(page)).toBe('OPEN');
   });
 
   test('the ask reverts by itself after 5 s', async ({ page }) => {
     await openHost(page);
-    await page.click('#close-voting');
-    await expect(page.locator('#confirm-close')).toBeVisible();
-    await expect(page.locator('#close-voting')).toBeVisible({ timeout: 6000 });
-    await expect(page.locator('#confirm-close')).toBeHidden();
+    await statusOption(page, 'CLOSED').click();
+    await expect(statusOption(page, 'CLOSED')).toHaveText('Tap again');
+    await expect(statusOption(page, 'CLOSED')).toHaveText('Closed', { timeout: 6000 });
+    await expect(page.locator('#status-cancel')).toBeHidden();
   });
 
   test('a poll during the ask leaves it in place', async ({ page }) => {
     await openHost(page);
-    await page.click('#close-voting');
+    await statusOption(page, 'CLOSED').click();
     await pollNow(page);
     await page.waitForTimeout(600);
-    await expect(page.locator('#confirm-close')).toBeVisible();
+    await expect(statusOption(page, 'CLOSED')).toHaveText('Tap again');
   });
 
-  test('CLOSED: a ghost Reopen button, one tap', async ({ page }) => {
-    await openHost(page, 'CLOSED');
-    await expect(page.locator('#status-text')).toHaveText('Closed');
-    await expect(page.getByText('Guests now see results.')).toBeVisible();
-    await expect(page.locator('#reopen-voting')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-    await page.click('#reopen-voting');
-    await expect(page.locator('#status-text')).toHaveText('Voting open');
+  test('an ask for a status that arrives some other way is dropped', async ({ page }) => {
+    await openHost(page);
+    await statusOption(page, 'CLOSED').click();
+    await setStatus(page, 'CLOSED');
+    await pollNow(page);
+    await expect(statusOption(page, 'CLOSED')).toHaveText('Closed');
+    await expect(statusOption(page, 'CLOSED')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#status-cancel')).toBeHidden();
   });
 
-  test('a failed status change says so, and leaves things as they were', async ({ page }) => {
+  test('a failed change says so, and leaves things as they were', async ({ page }) => {
     await openHost(page, 'SOON');
     await failNext(page, 'network');
-    await page.click('#open-voting');
+    await chooseStatus(page, 'OPEN');
     await expect(page.locator('#action-error')).toHaveText("Didn't go through. Try again.");
-    await expect(page.locator('#open-voting')).toBeEnabled();
+    await expect(statusOption(page, 'OPEN')).toBeEnabled();
     await expect(page.locator('#status-text')).toHaveText('Voting soon');
 
-    await page.click('#open-voting');
+    await chooseStatus(page, 'OPEN');
     await expect(page.locator('#status-text')).toHaveText('Voting open');
     await expect(page.locator('#action-error')).toBeHidden();
+  });
+});
+
+test.describe('host unlock', () => {
+  const unlockIn = (row) => row.locator('.row__unlock');
+  const rowFor = (page, name) => page.locator('#ballot-rows .row').filter({
+    has: page.locator('.row__name', { hasText: new RegExp(`^${name}$`) }),
+  });
+  const ballotNamed = (page, name) => page.evaluate(
+    (n) => window.dhMock.state().ballots.find((b) => b.name === n),
+    name,
+  );
+
+  async function unlock(page, name) {
+    await unlockIn(rowFor(page, name)).click();
+    await page.waitForTimeout(450);
+    await unlockIn(rowFor(page, name)).click();
+  }
+
+  test('every ballot has an Unlock button, including ones voided with x', async ({ page }) => {
+    await openHost(page);
+    await expect(page.locator('#ballot-rows .row__unlock')).toHaveCount(28);
+    await expect(unlockIn(rowFor(page, 'Test ballot'))).toBeVisible();
+    await expect(page.locator('#unlock-helper')).toHaveText('Unlock tosses a ballot and lets that phone vote again.');
+  });
+
+  test('Same phone? rows have no Unlock button', async ({ page }) => {
+    await openHost(page);
+    await expect(page.locator('#flag-section .row__unlock')).toHaveCount(0);
+  });
+
+  test('the first tap asks, and the second unlocks and drops it from the counts', async ({ page }) => {
+    await openHost(page);
+    await expect(page.locator('#stat-ballots')).toHaveText('27');
+
+    await unlockIn(rowFor(page, 'Theo')).click();
+    await expect(unlockIn(rowFor(page, 'Theo'))).toHaveText('Tap again');
+    await expect(unlockIn(rowFor(page, 'Theo'))).toHaveCSS('background-color', 'rgb(255, 214, 10)');
+    await expect(unlockIn(rowFor(page, 'Theo'))).toBeFocused();
+    expect((await ballotNamed(page, 'Theo')).unlocked).toBeFalsy();
+
+    await page.waitForTimeout(450);
+    await unlockIn(rowFor(page, 'Theo')).click();
+
+    await expect(rowFor(page, 'Theo').locator('.tag--void')).toHaveText('Unlocked');
+    await expect(rowFor(page, 'Theo').locator('.row__name')).toHaveCSS('text-decoration-line', 'line-through');
+    await expect(unlockIn(rowFor(page, 'Theo'))).toHaveCount(0);
+    await expect(page.locator('#stat-ballots')).toHaveText('26');
+    expect(await ballotNamed(page, 'Theo')).toMatchObject({ void: true, unlocked: true });
+  });
+
+  test('an accidental double-tap does not unlock', async ({ page }) => {
+    await openHost(page);
+    await unlockIn(rowFor(page, 'Theo')).click();
+    await page.evaluate(() => document.querySelector('#ballot-rows .row__unlock.is-armed').click());
+    await page.waitForTimeout(500);
+    await expect(unlockIn(rowFor(page, 'Theo'))).toHaveText('Tap again');
+    expect((await ballotNamed(page, 'Theo')).unlocked).toBeFalsy();
+  });
+
+  test('the ask reverts by itself after 5 s', async ({ page }) => {
+    await openHost(page);
+    await unlockIn(rowFor(page, 'Theo')).click();
+    await expect(unlockIn(rowFor(page, 'Theo'))).toHaveText('Tap again');
+    await expect(unlockIn(rowFor(page, 'Theo'))).toHaveText('Unlock', { timeout: 6000 });
+  });
+
+  test('tapping another row moves the ask without unlocking anything', async ({ page }) => {
+    await openHost(page);
+    await unlockIn(rowFor(page, 'Theo')).click();
+    await page.waitForTimeout(450);
+    await unlockIn(rowFor(page, 'Jules')).click();
+    await expect(unlockIn(rowFor(page, 'Theo'))).toHaveText('Unlock');
+    await expect(unlockIn(rowFor(page, 'Jules'))).toHaveText('Tap again');
+    expect((await ballotNamed(page, 'Theo')).unlocked).toBeFalsy();
+    expect((await ballotNamed(page, 'Jules')).unlocked).toBeFalsy();
+  });
+
+  test('a status ask and an unlock ask replace each other', async ({ page }) => {
+    await openHost(page);
+    await unlockIn(rowFor(page, 'Theo')).click();
+    await statusOption(page, 'CLOSED').click();
+    await expect(unlockIn(rowFor(page, 'Theo'))).toHaveText('Unlock');
+    await expect(statusOption(page, 'CLOSED')).toHaveText('Tap again');
+    await unlockIn(rowFor(page, 'Theo')).click();
+    await expect(statusOption(page, 'CLOSED')).toHaveText('Closed');
+    await expect(unlockIn(rowFor(page, 'Theo'))).toHaveText('Tap again');
+  });
+
+  test('a poll during the ask keeps the same button, so the second tap lands', async ({ page }) => {
+    await openHost(page);
+    await unlockIn(rowFor(page, 'Theo')).click();
+    const before = await unlockIn(rowFor(page, 'Theo')).elementHandle();
+    await pollNow(page);
+    await page.waitForTimeout(600);
+    expect(await before.evaluate((node) => node.isConnected)).toBe(true);
+    await expect(unlockIn(rowFor(page, 'Theo'))).toHaveText('Tap again');
+  });
+
+  test('closed: no Unlock buttons or helper, and they come back on reopening', async ({ page }) => {
+    await openHost(page, 'CLOSED');
+    await expect(page.locator('#ballot-rows .row')).toHaveCount(28);
+    await expect(page.locator('#ballot-rows .row__unlock')).toHaveCount(0);
+    await expect(page.locator('#unlock-helper')).toBeHidden();
+
+    await chooseStatus(page, 'OPEN');
+    await expect(page.locator('#ballot-rows .row__unlock')).toHaveCount(28);
+    await expect(page.locator('#unlock-helper')).toBeVisible();
+  });
+
+  test('a failed unlock says so, changes nothing, and can be retried', async ({ page }) => {
+    await openHost(page);
+    await failNext(page, 'network');
+    await unlock(page, 'Theo');
+    await expect(page.locator('#unlock-error')).toHaveText("Didn't go through. Try again.");
+    expect((await ballotNamed(page, 'Theo')).unlocked).toBeFalsy();
+    await expect(unlockIn(rowFor(page, 'Theo'))).toBeEnabled();
+
+    await unlock(page, 'Theo');
+    await expect(rowFor(page, 'Theo').locator('.tag--void')).toHaveText('Unlocked');
+    await expect(page.locator('#unlock-error')).toBeHidden();
+  });
+
+  test('voting closed elsewhere first: the refusal shows, and the buttons leave on the poll', async ({ page }) => {
+    await openHost(page);
+    await unlockIn(rowFor(page, 'Theo')).click();
+    await setStatus(page, 'CLOSED');
+    await page.waitForTimeout(450);
+    await unlockIn(rowFor(page, 'Theo')).click();
+    await expect(page.locator('#unlock-error')).toHaveText("Didn't go through. Try again.");
+    expect((await ballotNamed(page, 'Theo')).unlocked).toBeFalsy();
+    await pollNow(page);
+    await expect(page.locator('#ballot-rows .row__unlock')).toHaveCount(0);
+  });
+
+  test('a changed password returns to Login', async ({ page }) => {
+    await openHost(page);
+    await failNext(page, 'bad_password');
+    await unlock(page, 'Theo');
+    await expect(hostScreen(page, 'login')).toBeVisible();
   });
 });
 
@@ -834,19 +1074,119 @@ test.describe('host and guest together', () => {
       await hostTab.goto(HOST);
       await hostTab.waitForFunction(() => window.dhMock);
       await login(hostTab);
-      await hostTab.click('#close-voting');
-      await hostTab.waitForTimeout(450);
-      await hostTab.click('#confirm-close');
+      await chooseStatus(hostTab, 'CLOSED');
       await expect(hostTab.locator('#status-text')).toHaveText('Closed');
 
       // One poll is 20 s plus up to 3 s of jitter.
       await expect(screen(guest, 'results')).toBeVisible({ timeout: 24000 });
       await expect(guest.locator('.winner').nth(3)).toContainText('Runner up');
 
-      await hostTab.click('#reopen-voting');
+      await chooseStatus(hostTab, 'OPEN');
       await expect(hostTab.locator('#status-text')).toHaveText('Voting open');
     });
   }
+
+  test('unlocking reopens the guest tab within one poll, filled in, and they can vote again', async ({ context }) => {
+    test.setTimeout(60000);
+    const guest = await context.newPage();
+    await guest.goto(GUEST);
+    await expect(screen(guest, 'ballot')).toBeVisible();
+    await fillBallot(guest, { name: 'Oops', picks: ['12', '7', '21', '3'] });
+    await guest.click('#cast');
+    await expect(screen(guest, 'voted')).toBeVisible();
+    await expect(guest.locator('#reopened-note')).toBeHidden();
+
+    const hostTab = await context.newPage();
+    await hostTab.goto(HOST);
+    await hostTab.waitForFunction(() => window.dhMock);
+    await login(hostTab);
+    const row = hostTab.locator('#ballot-rows .row').filter({ hasText: 'Oops' });
+    await row.locator('.row__unlock').click();
+    await hostTab.waitForTimeout(450);
+    await row.locator('.row__unlock').click();
+    await expect(row.locator('.tag--void')).toHaveText('Unlocked');
+
+    // One poll is 20 s plus up to 3 s of jitter.
+    await expect(screen(guest, 'ballot')).toBeVisible({ timeout: 24000 });
+    await expect(guest.locator('#reopened-note')).toHaveText('The host reopened your ballot. Cast it again.');
+    await expect(guest.locator('#voter-name')).toHaveValue('Oops');
+    await expect(guest.locator('#pick-best')).toHaveValue('12');
+    await expect(guest.locator('#pick-runner_up')).toHaveValue('3');
+    await expect(guest.locator('.sticker.is-valid')).toHaveCount(4);
+    await expect(guest.locator('#cast')).toBeEnabled();
+    expect(await guest.evaluate(() => localStorage.getItem('dh.ballot'))).toBeNull();
+
+    await guest.fill('#pick-best', '4');
+    await guest.click('#cast');
+    await expect(screen(guest, 'voted')).toBeVisible();
+    await expect(guest.locator('#receipt-picks')).toContainText('#4');
+
+    // The new receipt survives a reload, and the old unlock can't wipe it.
+    await guest.reload();
+    await expect(screen(guest, 'voted')).toBeVisible();
+    await expect(guest.locator('#receipt-picks')).toContainText('#4');
+
+    await hostTab.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await expect(hostTab.locator('#stat-ballots')).toHaveText('28');
+    await expect(hostTab.locator('#ballot-rows .row').filter({ hasText: 'Oops' })).toHaveCount(2);
+    await expect(hostTab.locator('#flag-section')).not.toContainText('Oops');
+  });
+
+  test('a phone that was away finds out when it next loads the page', async ({ page }) => {
+    await openGuest(page);
+    await fillBallot(page, { name: 'Away' });
+    await page.click('#cast');
+    await expect(screen(page, 'voted')).toBeVisible();
+    await unlockFromConsole(page, 'Away');
+    await page.reload();
+    await expect(screen(page, 'ballot')).toBeVisible();
+    await expect(page.locator('#voter-name')).toHaveValue('Away');
+  });
+
+  test('a phone told "already voted" reopens too, with an empty form', async ({ page }) => {
+    await openGuest(page);
+    await fillBallot(page, { name: 'Lost receipt' });
+    await page.click('#cast');
+    await expect(screen(page, 'voted')).toBeVisible();
+    await page.evaluate(() => localStorage.setItem('dh.ballot', JSON.stringify({ alreadyVoted: true })));
+    await page.reload();
+    await expect(page.locator('#receipt-already')).toBeVisible();
+
+    await unlockFromConsole(page, 'Lost receipt');
+    await page.reload();
+    await expect(screen(page, 'ballot')).toBeVisible();
+    await expect(page.locator('#reopened-note')).toBeVisible();
+    await expect(page.locator('#voter-name')).toHaveValue('');
+
+    await fillBallot(page, { name: 'Found it' });
+    await page.click('#cast');
+    await expect(screen(page, 'voted')).toBeVisible();
+    await expect(page.locator('#receipt-customer')).toHaveText('Found it');
+  });
+
+  test('another guest is not reopened by someone else being unlocked', async ({ page }) => {
+    await openGuest(page);
+    await fillBallot(page, { name: 'Bystander' });
+    await page.click('#cast');
+    await expect(screen(page, 'voted')).toBeVisible();
+    await unlockFromConsole(page, 'Theo');
+    await page.reload();
+    await expect(screen(page, 'voted')).toBeVisible();
+    await expect(page.locator('#receipt-customer')).toHaveText('Bystander');
+  });
+
+  test('a voided phone, with x in the Sheet, stays on its receipt', async ({ page }) => {
+    await openGuest(page);
+    await fillBallot(page, { name: 'Tossed' });
+    await page.click('#cast');
+    await expect(screen(page, 'voted')).toBeVisible();
+    await page.evaluate(() => {
+      const mine = window.dhMock.state().ballots.find((b) => b.name === 'Tossed');
+      window.dhMock.toggleVoid(mine.ballotId);
+    });
+    await page.reload();
+    await expect(screen(page, 'voted')).toBeVisible();
+  });
 
   test('a guest tab shows no counts while voting is open, with votes in', async ({ context }) => {
     const guest = await context.newPage();
@@ -975,6 +1315,21 @@ test.describe('live transport', () => {
     expect(requested.some((u) => u.includes('mock-api'))).toBe(false);
     expect(await page.evaluate(() => typeof window.dhMock)).toBe('undefined');
     await expect(page.locator('.mock-panel')).toHaveCount(0);
+  });
+
+  test('a phone that has voted asks about its ballot ID in the URL, with no preflight', async ({ page }) => {
+    await page.goto('/index.html');
+    await expect(screen(page, 'ballot')).toBeVisible();
+    await fillBallot(page);
+    await page.click('#cast');
+    await expect(screen(page, 'voted')).toBeVisible();
+
+    seen.length = 0;
+    await page.reload();
+    await expect(screen(page, 'voted')).toBeVisible();
+    await expect.poll(() => seen.filter((r) => r.method === 'GET').length).toBeGreaterThan(0);
+    expect(seen.find((r) => r.method === 'GET').url).toBe('/macros/s/TEST/exec?action=state&ref=b_live');
+    expect(seen.filter((r) => r.method === 'OPTIONS')).toEqual([]);
   });
 
   test('host calls carry the password in the body only, never the URL', async ({ page }) => {

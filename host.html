@@ -52,12 +52,13 @@
   </div>
 
   <div class="actions">
-    <button id="open-voting" class="btn btn--tall" type="button" hidden>Open voting</button>
-    <button id="close-voting" class="btn btn--tall" type="button" hidden>Close voting</button>
-    <button id="confirm-close" class="btn btn--confirm" type="button" hidden>Tap again to close</button>
-    <button id="cancel-close" class="link-button" type="button" hidden>Cancel</button>
-    <button id="reopen-voting" class="btn btn--ghost" type="button" hidden>Reopen voting</button>
-    <p id="action-helper" class="helper" hidden></p>
+    <div id="status-control" class="status-control" role="group" aria-label="Voting status">
+      <button class="status-control__option" type="button" data-value="SOON">Soon</button>
+      <button class="status-control__option" type="button" data-value="OPEN">Open</button>
+      <button class="status-control__option" type="button" data-value="CLOSED">Closed</button>
+    </div>
+    <p id="action-helper" class="helper"></p>
+    <button id="status-cancel" class="link-button" type="button" hidden>Cancel</button>
     <p id="action-error" class="error-line" role="alert" hidden></p>
   </div>
 
@@ -81,6 +82,8 @@
       <h2 class="section__title">Ballots</h2>
       <span class="label">Best · Fav · Disc · Runner</span>
     </div>
+    <p id="unlock-helper" class="helper">Unlock tosses a ballot and lets that phone vote again.</p>
+    <p id="unlock-error" class="error-line" role="alert" hidden></p>
     <div id="ballot-rows" class="rows"></div>
   </section>
 

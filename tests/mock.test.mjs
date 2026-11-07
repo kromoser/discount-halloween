@@ -24,9 +24,11 @@ function realBackend() {
   const code = loadCode(env.globals, ['doGet', 'doPost', 'setup']);
   code.setup();
   return {
-    getState: async () => {
+    getState: async (ref) => {
       env.cache.delete('state');
-      return JSON.parse(code.doGet({ parameter: { action: 'state' } }).text);
+      env.cache.delete('unlocks');
+      const parameter = ref ? { action: 'state', ref } : { action: 'state' };
+      return JSON.parse(code.doGet({ parameter }).text);
     },
     post: async (body) => JSON.parse(code.doPost({ postData: { contents: JSON.stringify(body) } }).text),
   };
@@ -162,6 +164,68 @@ describe('parity with Code.gs', () => {
       await assertSame({ action: 'setStatus', password: 'RIGHT', status }, String(status));
     }
     await assertSame({ action: 'setStatus', password: 'wrong', status: 'OPEN' });
+  });
+
+  describe('unlock', () => {
+    // Ballot IDs differ between the two, so each side is told its own.
+    async function unlockBoth(ids, password = 'RIGHT') {
+      const send = (ballotId, right) => ({
+        action: 'unlock',
+        ballotId,
+        password: password === 'RIGHT' ? right : password,
+      });
+      return [
+        await backend.post(send(ids[0], MOCK_PASSWORD)),
+        await real.post(send(ids[1], PASSWORD)),
+      ];
+    }
+    const idsOf = ([mine, theirs]) => [mine.ballotId, theirs.ballotId];
+
+    test('a ballot, its state answer and the next vote all match', async () => {
+      await bothSetStatus('OPEN');
+      const body = ballot();
+      const first = idsOf(await both(body));
+
+      const [mine, theirs] = await unlockBoth(first);
+      assert.deepEqual(comparable(mine), comparable(theirs));
+      assert.equal(mine.ok, true);
+
+      assert.deepEqual(await backend.getState(first[0]), await real.getState(first[1]));
+      assert.equal((await backend.getState(first[0])).unlocked, true);
+      assert.deepEqual(await backend.getState(body.deviceId), await real.getState(body.deviceId));
+      assert.equal((await backend.getState(body.deviceId)).unlocked, true);
+      assert.deepEqual(await backend.getState('junk'), await real.getState('junk'));
+      assert.deepEqual(await backend.getState(), await real.getState());
+
+      await assertSame({ action: 'host', password: 'RIGHT' }, 'host snapshot');
+
+      const second = idsOf(await both(body));
+      assert.deepEqual(await backend.getState(second[0]), await real.getState(second[1]));
+      assert.equal((await backend.getState(second[0])).unlocked, undefined);
+      assert.deepEqual(await backend.getState(body.deviceId), await real.getState(body.deviceId));
+      assert.equal((await backend.getState(body.deviceId)).unlocked, undefined);
+      assert.equal((await assertSame(body, 'locked again')).error, 'already_voted');
+    });
+
+    test('refusals match', async () => {
+      await bothSetStatus('OPEN');
+      const ids = idsOf(await both(ballot()));
+
+      for (const id of ['b_nope', '', undefined, 7]) {
+        const [mine, theirs] = await unlockBoth([id, id]);
+        assert.deepEqual(mine, theirs, String(id));
+        assert.equal(mine.error, 'bad_request');
+      }
+
+      const [wrongMine, wrongTheirs] = await unlockBoth(ids, 'wrong');
+      assert.deepEqual(wrongMine, wrongTheirs);
+      assert.equal(wrongMine.error, 'bad_password');
+
+      await bothSetStatus('CLOSED');
+      const [closedMine, closedTheirs] = await unlockBoth(ids);
+      assert.deepEqual(closedMine, closedTheirs);
+      assert.equal(closedMine.error, 'closed');
+    });
   });
 
   test('password failures lock out on the same try', async () => {

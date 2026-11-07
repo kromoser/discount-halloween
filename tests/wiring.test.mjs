@@ -66,7 +66,7 @@ describe('setup', () => {
     assert.deepEqual(textCols, [1, 2, 3, 8, 9, 10]);
     assert.equal(votes().validations.length, 1);
     assert.equal(votes().validations[0].col, 11);
-    assert.deepEqual(votes().validations[0].rule.list, ['x']);
+    assert.deepEqual(votes().validations[0].rule.list, ['x', 'unlocked']);
     assert.equal(votes().validations[0].rule.allowInvalid, true, 'any non-blank value must still be allowed');
   });
 
@@ -284,6 +284,173 @@ describe('POST setStatus', () => {
   test('a wrong password changes nothing', () => {
     assert.equal(post({ action: 'setStatus', password: 'nope', status: 'OPEN' }).error, 'bad_password');
     assert.equal(settings().rows[0][1], 'SOON');
+  });
+});
+
+describe('POST unlock', () => {
+  const unlock = (ballotId, password = PASSWORD) => post({ action: 'unlock', password, ballotId });
+  const stateFor = (ref) => parse(code.doGet({ parameter: { action: 'state', ref } }));
+  const clearUnlocks = () => env.cache.delete('unlocks');
+
+  test('marks the void cell, and the ballot stops counting right away', () => {
+    open();
+    const { ballotId } = post(ballot());
+    assert.deepEqual(unlock(ballotId), { ok: true, ballotId });
+    assert.equal(votes().rows[1][10], 'unlocked');
+    const host = post({ action: 'host', password: PASSWORD });
+    assert.equal(host.ballotCount, 0);
+    assert.equal(host.ballots[0].unlocked, true);
+  });
+
+  test('lets that device vote again, keeping the old row for the record', () => {
+    open();
+    const body = ballot();
+    const first = post(body);
+    assert.equal(post(body).error, 'already_voted');
+    unlock(first.ballotId);
+
+    const second = post({ ...body, name: 'Dana again' });
+    assert.equal(second.ok, true);
+    assert.equal(votes().rows.length, 3);
+    assert.equal(votes().rows[1][10], 'unlocked');
+    assert.equal(post(body).error, 'already_voted', 'one new ballot, then locked again');
+    assert.equal(post({ action: 'host', password: PASSWORD }).ballotCount, 1);
+  });
+
+  test('also opens up a ballot that was voided with x', () => {
+    open();
+    const body = ballot();
+    const { ballotId } = post(body);
+    votes().rows[1][10] = 'x';
+    assert.equal(post(body).error, 'already_voted');
+    unlock(ballotId);
+    assert.equal(post(body).ok, true);
+  });
+
+  test('a wrong password changes nothing', () => {
+    open();
+    const { ballotId } = post(ballot());
+    assert.equal(unlock(ballotId, 'nope').error, 'bad_password');
+    assert.equal(votes().rows[1][10], '');
+  });
+
+  test('is refused once voting is closed, so it cannot change revealed results', () => {
+    open();
+    const { ballotId } = post(ballot());
+    post({ action: 'setStatus', password: PASSWORD, status: 'CLOSED' });
+    assert.equal(unlock(ballotId).error, 'closed');
+    assert.equal(votes().rows[1][10], '');
+  });
+
+  test('works while voting is SOON', () => {
+    open();
+    const { ballotId } = post(ballot());
+    post({ action: 'setStatus', password: PASSWORD, status: 'SOON' });
+    assert.equal(unlock(ballotId).ok, true);
+  });
+
+  test('an unknown or missing ballot ID is a bad request and touches no row', () => {
+    open();
+    post(ballot());
+    votes().rows.push(new Array(11).fill('')); // a row the host cleared by hand
+    for (const id of ['b_nope', 'ballot_id', '', undefined, null, 7, ['b_nope']]) {
+      assert.equal(unlock(id).error, 'bad_request', String(id));
+    }
+    assert.equal(votes().rows[1][10], '');
+    assert.equal(votes().rows[2][10], '');
+    assert.equal(votes().rows[0][10], 'void', 'the header row is not a ballot');
+  });
+
+  test('takes no lock, so it never queues behind a burst of votes', () => {
+    open();
+    const { ballotId } = post(ballot());
+    const tries = env.spy.lockTries.length;
+    unlock(ballotId);
+    assert.equal(env.spy.lockTries.length, tries);
+  });
+
+  test('the unlocked phone hears about it on its next poll, and nobody else does', () => {
+    open();
+    const body = ballot();
+    const { ballotId } = post(body);
+    const bystander = post(ballot());
+    assert.equal(stateFor(ballotId).unlocked, undefined, 'not before the unlock');
+
+    unlock(ballotId);
+    assert.deepEqual(stateFor(ballotId), { ok: true, status: 'OPEN', boardSize: 30, unlocked: true });
+    assert.deepEqual(stateFor(body.deviceId), { ok: true, status: 'OPEN', boardSize: 30, unlocked: true });
+    assert.equal(stateFor(bystander.ballotId).unlocked, undefined);
+    assert.equal(stateFor('junk').unlocked, undefined);
+  });
+
+  test('a new ballot from that phone is never reported as unlocked', () => {
+    open();
+    const body = ballot();
+    const first = post(body);
+    unlock(first.ballotId);
+    const second = post(body);
+    clearUnlocks();
+    assert.equal(stateFor(second.ballotId).unlocked, undefined);
+    assert.equal(stateFor(body.deviceId).unlocked, undefined);
+    assert.equal(stateFor(first.ballotId).unlocked, true, 'the old receipt is still out of date');
+  });
+
+  test('a stale list can still never name a ballot cast after it was built', () => {
+    open();
+    const body = ballot();
+    const first = post(body);
+    unlock(first.ballotId);
+    stateFor(first.ballotId); // caches the list
+    const second = post(body);
+    assert.equal(stateFor(second.ballotId).unlocked, undefined);
+  });
+
+  test('polls without a ref stay exactly the public state and never read the votes', () => {
+    open();
+    unlock(post(ballot()).ballotId);
+    clearStateCache();
+    clearUnlocks();
+    const putsBefore = env.spy.cachePuts.length;
+    const raw = code.doGet({ parameter: { action: 'state' } }).text;
+    assert.equal(raw, '{"ok":true,"status":"OPEN","boardSize":30}');
+    assert.deepEqual(env.spy.cachePuts.slice(putsBefore).map((p) => p.key), ['state']);
+  });
+
+  test('the answer to an unlocked phone has no counts while voting is open', () => {
+    open();
+    const { ballotId } = post(ballot());
+    unlock(ballotId);
+    assert.deepEqual(Object.keys(stateFor(ballotId)).sort(), ['boardSize', 'ok', 'status', 'unlocked']);
+  });
+
+  test('a phone unlocked before closing still gets results with its answer', () => {
+    open();
+    const { ballotId } = post(ballot());
+    post(ballot());
+    unlock(ballotId);
+    post({ action: 'setStatus', password: PASSWORD, status: 'CLOSED' });
+    const res = stateFor(ballotId);
+    assert.equal(res.unlocked, true);
+    assert.equal(res.ballotCount, 1);
+    assert.equal(res.results.length, 4);
+  });
+
+  test('the list of unlocked ballots is cached for 10 s, and an unlock clears it', () => {
+    open();
+    const { ballotId } = post(ballot());
+    stateFor(ballotId);
+    assert.deepEqual(env.spy.cachePuts.at(-1), { key: 'unlocks', seconds: 10 });
+
+    votes().rows[1][10] = 'unlocked'; // typed by hand in the Sheet
+    assert.equal(stateFor(ballotId).unlocked, undefined, 'served from cache');
+    clearUnlocks();
+    assert.equal(stateFor(ballotId).unlocked, true, 'a hand edit shows up when the entry expires');
+
+    open();
+    const other = post(ballot());
+    stateFor(other.ballotId);
+    unlock(other.ballotId);
+    assert.equal(stateFor(other.ballotId).unlocked, true, 'an unlock takes effect right away');
   });
 });
 

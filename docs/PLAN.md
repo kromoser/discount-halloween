@@ -112,6 +112,8 @@ When `status` is `CLOSED`, it also returns results. Each category lists every nu
 
 While `SOON` or `OPEN`, the response must contain no counts of any kind, not even `ballotCount`.
 
+A phone that has voted adds `&ref=<ballotId>` (or `&ref=<deviceId>` if it was told `already_voted` and has no ballot ID). If that ballot was unlocked, the response gains `"unlocked": true`, and the rest is unchanged. A phone that hasn't voted sends no `ref`, so its response is exactly the public state and costs no read of the votes. The list of unlocked ballots is cached for 10 s and comes from the `void` column. A receipt asks by ballot ID so that a new ballot can never match an old entry, even in a cached list. A device is only listed while it has no other ballot on file.
+
 **`POST { action: "vote" }`** (guest page; public)
 
 ```json
@@ -126,7 +128,7 @@ It returns `{ "ok": true, "ballotId": "b_7f3c…", "submittedAt": "…" }`. The 
 2. `deviceId` is a UUID and `fingerprint` is 1–64 hex characters. Otherwise return `bad_request`.
 3. `name`, trimmed, is 1–40 characters with control characters removed. Otherwise return `invalid_name`.
 4. Each of the four picks is an integer from 1 to `board_size`. Otherwise return `invalid_pick` with `"field": "<key>"` for the first bad one.
-5. No existing row, void or not, has this `device_id`. Otherwise return `already_voted`.
+5. No existing row has this `device_id`, void or not, unless that row is unlocked. Otherwise return `already_voted`.
 6. Append the row with `appendRow`, then release the lock.
 
 **`POST { action: "host", password }`** (host page)
@@ -139,7 +141,7 @@ This is a read-only dashboard snapshot. `tallies` lists every number that got a 
   "flagGroups": [["b_3…", "b_5…"]],
   "ballots": [{ "ballotId": "b_5…", "submittedAt": "…", "name": "Dana",
                 "picks": { "best": 12, "favorite": 7, "most_discount": 21, "runner_up": 3 },
-                "void": false, "flagGroup": 0 }],
+                "void": false, "unlocked": false, "flagGroup": 0 }],
   "serverTime": "…" }
 ```
 
@@ -147,7 +149,13 @@ This is a read-only dashboard snapshot. `tallies` lists every number that got a 
 
 **`POST { action: "setStatus", password, status }`** (host page)
 
-This writes `SOON`, `OPEN` or `CLOSED` to `Settings!B` and clears the state cache. It returns `{ "ok": true, "status": "CLOSED" }`. It is the only write the host page can make.
+This writes `SOON`, `OPEN` or `CLOSED` to `Settings!B` and clears the state cache. It returns `{ "ok": true, "status": "CLOSED" }`.
+
+**`POST { action: "unlock", password, ballotId }`** (host page)
+
+This writes `unlocked` to that ballot's `void` cell and clears the cached list of unlocked ballots. The ballot stops counting right away, and its phone can vote again, because `already_voted` ignores unlocked rows. The old row stays in the Sheet for the record. It returns `{ "ok": true, "ballotId": "b_…" }`, `bad_request` if there's no such ballot, or `closed` if voting is closed, so a stray tap can't change results guests have already seen. It takes no lock: it changes one existing cell, and the host shouldn't queue behind a burst of votes.
+
+The status and this are the only writes the host page can make. An `x` (or anything else) in the `void` cell is still a plain void, and that phone stays locked.
 
 **Password handling:** compare against `HOST_PASSWORD`. A wrong password returns `bad_password`. Count failures in `CacheService` and return `too_many_attempts` after 10 failures within 10 minutes.
 
@@ -184,11 +192,13 @@ One page that picks its screen from two inputs: the server `status` and whether 
 
 **Polling:** fetch `state` every 20 s while the Soon or Voted screen is showing and the tab is visible. Fetch once on `visibilitychange` back to visible. Stop on Results, since results don't change after close except through voids, and a reload picks those up. Add 0–3 s of random jitter so 30 phones don't hit the script in step.
 
+**Unlocked:** when `state` answers `"unlocked": true`, delete `dh.ballot` and go back to the Ballot form, filled in with the name and picks from the old receipt, under the line "The host reopened your ballot. Cast it again." The device ID stays. A phone told `already_voted` has no picks saved, so its form is empty.
+
 **Storage keys:** `dh.deviceId` (UUID, created on first load), `dh.ballot` (JSON). Wrap every read and write in `try/catch`. If storage is blocked, voting still works, but the one-per-phone check then rests on the server's device ID and fingerprint alone.
 
 ## Host page (`host.html`)
 
-This is a separate URL that isn't linked from the guest page. It has two screens: Login and Dashboard. It changes only the voting status. Everything else is fixed in the Sheet.
+This is a separate URL that isn't linked from the guest page. It has two screens: Login and Dashboard. It changes the voting status and unlocks ballots. Everything else is fixed in the Sheet.
 
 **Login**
 
@@ -200,18 +210,15 @@ This is a separate URL that isn't linked from the guest page. It has two screens
 
 1. Header: "Host" plus a status pill (`Voting soon`, `Voting open` with an orange dot, `Closed`).
 2. Stats row with three numbers: Ballots (`ballotCount`), On the board (`boardSize`), Flagged (ballots in any flag group; yellow when above 0).
-3. One primary action, set by status:
-    - `SOON`: **Open voting** (one tap).
-    - `OPEN`: **Close voting**. The first tap turns the button yellow and changes it to "Tap again to close", with a Cancel link. It reverts after 5 s. The second tap calls `setStatus CLOSED`. Helper line: "Closing shows results on every guest's phone."
-    - `CLOSED`: **Reopen voting** (ghost button, one tap). Helper line: "Guests now see results."
+3. Status control: three buttons, **Soon**, **Open** and **Closed**, with the current one filled orange. Any change takes two taps. The first turns that button yellow and changes it to "Tap again", with a Cancel link. It reverts after 5 s, and tapping the current status backs out too. A helper line says what guests see now, or what the second tap will do, such as "Closing shows results on every guest's phone."
 4. Live results: "Only you see this". For each category, show the top 3 numbers as horizontal bars, with bar length equal to votes divided by `ballotCount`. Every number tied for first gets the orange bar and bright text. The rest are muted.
 5. "Same phone?": each flag group as a block of rows (name, time, picks as `12 · 7 · 21 · 3`). Under it: "These ballots look like they came from one phone. To toss one, type x in its Void cell in the Sheet." Add an "Open the Sheet" link if `SHEET_URL` is set in config.
-6. Ballots: newest first, all of them. Void ballots are struck through with a "Void" tag. Flagged ones carry a yellow "Flag" tag. A column hint reads `Best · Fav · Disc · Runner`.
+6. Ballots: newest first, all of them. Void ballots are struck through with a "Void" tag, or "Unlocked" if they were unlocked. Flagged ones carry a yellow "Flag" tag. A column hint reads `Best · Fav · Disc · Runner`. Each ballot has an **Unlock** button, with the same two taps as the status control, until it's unlocked. While `CLOSED` there are no Unlock buttons. Helper line: "Unlock tosses a ballot and lets that phone vote again."
 7. Footer: "Updated 9:41:05 PM" from `serverTime`.
 
-**Polling:** call `host` every 10 s while the tab is visible, and right after any `setStatus`. On `bad_password` during polling (the password was changed), drop `dh.hostPass` and return to Login.
+**Polling:** call `host` every 10 s while the tab is visible, and right after any `setStatus` or `unlock`. On `bad_password` during polling (the password was changed), drop `dh.hostPass` and return to Login.
 
-**Change from the mockup:** the per-ballot Toss button is dropped. Voiding lives in the Sheet.
+**Changes from the mockup:** the per-ballot Toss button is dropped, and voiding lives in the Sheet. The single status button becomes the three-way control, and each ballot gets an Unlock button.
 
 ## Design spec
 
@@ -254,8 +261,10 @@ Match the mockups in `docs/mockups/` (one `.dc.html` file per screen; the origin
 
 | Where | Text |
 | --- | --- |
-| Ballot eyebrow | Costume ballot · Voting open |
-| Ballot hint | Enter the number on the polaroid. |
+| Ballot eyebrow | Costume contest · Voting open, centered |
+| Soon eyebrow | Costume contest, centered |
+| Ballot label above the picks | Vote for one costume per category, in the same style as "Your name", with extra space above it |
+| Receipt subtitle | Costume contest · Receipt |
 | Ballot footer | One ballot per phone. No refunds. |
 | Soon | Voting opens soon. |
 | Voted | Voted. / Results show up here when the host closes voting. |
@@ -316,8 +325,8 @@ discount-halloween/
 
 **`Code.gs` structure.** Keep the Google API calls in thin wrappers and everything else pure, so the logic can be tested in Node.
 
-- Entry points: `doGet(e)` routes `action=state`. `doPost(e)` parses the body and routes `vote`, `host` and `setStatus`. Both catch everything and return `server_error`.
-- Sheet wrappers: `readSettings_()`, `writeStatus_(s)`, `readVotes_()` (one `getDataRange().getValues()` call), `appendVote_(row)`.
+- Entry points: `doGet(e)` routes `action=state`. `doPost(e)` parses the body and routes `vote`, `host`, `setStatus` and `unlock`. Both catch everything and return `server_error`.
+- Sheet wrappers: `readSettings_()`, `writeStatus_(s)`, `readVotes_()` (one `getDataRange().getValues()` call), `appendVote_(row)`, `writeUnlocked_(ballotId)`.
 - Pure functions:
     - `validateBallot(body, boardSize)` returns `{ ok, error, field, clean }`.
     - `sanitizeName(s)` handles trimming, control characters and the formula prefix.
@@ -326,8 +335,9 @@ discount-halloween/
     - `flagGroups(rows)` groups non-void ballots by fingerprint.
     - `stateResponse(settings, rows)` must never include counts unless `CLOSED`.
     - `hostResponse(settings, rows)`.
+    - `unlockedRefs(rows)` lists what an unlocked phone can ask about.
 - `setup()` is run once by hand from the editor. It creates the `Votes` and `Settings` tabs if missing, writes the headers, sets `status=SOON` and `board_size=30`, freezes row 1, and formats the `void` column with an `x`-only data validation hint.
-- Caching: `CacheService.getScriptCache()` holds the `state` JSON for 10 s under key `state`. `setStatus` removes it.
+- Caching: `CacheService.getScriptCache()` holds the `state` JSON for 10 s under key `state`, and `setStatus` removes it. It holds the list of unlocked ballots for 10 s under key `unlocks`, and `unlock` removes that.
 - Constants at the top: the `CATEGORIES` array of `{ key, label }` in display order, and `COLS`, a column index map, so nothing hard-codes positions.
 
 **Mock mode** (`?mock=1` on either page) runs the full UI against `mock-api.js`. It's seeded with 27 example ballots and two flagged ones, and its status can be switched from the host page. This lets the UI be built and tested before any Google deployment exists. Mock mode keeps its state in `localStorage['dh.mock']`, so a guest tab and a host tab share it, and it never touches the network.
@@ -383,7 +393,8 @@ Run these against the live deployment on an iPhone (Safari) and an Android phone
 
 - [ ] `GET ?action=state` while `OPEN` contains no counts (check the raw JSON).
 - [ ] A wrong password shows the error. The 11th wrong try within 10 minutes returns `too_many_attempts`.
-- [ ] Close voting takes two taps. Every open guest phone shows Results within about 20 s.
+- [ ] Every status change takes two taps. After closing, every open guest phone shows Results within about 20 s.
+- [ ] Unlock takes two taps and drops that ballot from the host tallies. That phone goes back to a filled-in form within about 20 s, and its new vote is accepted and counted. A phone voided with `x` stays locked.
 - [ ] A tie for first shows both numbers on Results and on the host bars.
 - [ ] An `x` in a `void` cell drops that ballot from the host tallies within 10 s and from Results after a reload.
 - [ ] Editing `Settings` `status` by hand changes what guests see within one poll.
@@ -396,6 +407,6 @@ Run these against the live deployment on an iPhone (Safari) and an Android phone
 
 **On the night**
 
-- [ ] Tap Open voting once the board is mostly full.
-- [ ] Announce the close time, then tap Close voting twice.
+- [ ] Tap Open twice once the board is mostly full.
+- [ ] Announce the close time, then tap Closed twice.
 - [ ] Put the guest page on the TV for the reveal.

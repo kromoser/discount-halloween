@@ -25,7 +25,7 @@
 <section id="screen-soon" class="screen screen--roomy" hidden>
   <header class="header-logo">
     <h1 class="logo"><img src="assets/logo.svg" alt="Discount Halloween" width="707" height="332"></h1>
-    <p class="eyebrow">Costume ballot</p>
+    <p class="eyebrow">Costume contest</p>
   </header>
   <h2 class="display display--64 display--orange">Voting opens soon.</h2>
   <p class="fine-print push-down">Keep this tab open</p>
@@ -34,10 +34,12 @@
 <section id="screen-ballot" class="screen" hidden>
   <header class="header-logo">
     <h1 class="logo"><img src="assets/logo.svg" alt="Discount Halloween" width="707" height="332"></h1>
-    <p class="eyebrow">Costume ballot · Voting open</p>
+    <p class="eyebrow">Costume contest · Voting open</p>
   </header>
 
   <form id="ballot-form" class="ballot-form" novalidate>
+    <p id="reopened-note" class="notice" role="status" hidden>The host reopened your ballot. Cast it again.</p>
+
     <div class="stack gap-6">
       <label class="field" for="voter-name">
         <span class="eyebrow">Your name</span>
@@ -46,8 +48,8 @@
       <p id="name-error" class="error-line" role="alert" hidden></p>
     </div>
 
-    <div class="stack gap-6">
-      <p class="hint">Enter the number on the polaroid.</p>
+    <div class="stack gap-10 ballot-form__picks">
+      <p class="eyebrow">Vote for one costume per category</p>
       <div class="picks">
         <label class="pick" for="pick-best">
           <span class="pick__text">
@@ -111,7 +113,7 @@
     <div class="receipt__paper">
       <div class="receipt__head">
         <span class="receipt__title">Discount Halloween</span>
-        <span class="receipt__sub">Costume ballot · Receipt</span>
+        <span class="receipt__sub">Costume contest · Receipt</span>
       </div>
       <div id="receipt-detail" class="stack gap-12">
         <div class="receipt__line"><span>Customer</span><span id="receipt-customer"></span></div>

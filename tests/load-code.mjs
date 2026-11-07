@@ -9,7 +9,7 @@ import vm from 'node:vm';
 const NAMES = [
   'CATEGORIES', 'COLS', 'errorResponse', 'sanitizeName', 'validateBallot', 'hasDevice',
   'checkVote', 'buildRow', 'tally', 'winners', 'flagGroups', 'stateResponse', 'hostResponse',
-  'normalizeSettings', 'parseBody',
+  'normalizeSettings', 'parseBody', 'unlockedRefs',
 ];
 
 export const CODE_PATH = new URL('../apps-script/Code.gs', import.meta.url);

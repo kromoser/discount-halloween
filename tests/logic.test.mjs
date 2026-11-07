@@ -6,7 +6,7 @@ import { loadCode } from './load-code.mjs';
 
 const {
   CATEGORIES, COLS, sanitizeName, validateBallot, hasDevice, checkVote, buildRow, tally,
-  winners, flagGroups, stateResponse, hostResponse, normalizeSettings, parseBody,
+  winners, flagGroups, stateResponse, hostResponse, normalizeSettings, parseBody, unlockedRefs,
 } = loadCode();
 
 const DEVICE = '5b0e9c1a-1111-4222-8333-444455556666';
@@ -216,6 +216,58 @@ describe('checkVote', () => {
   });
 });
 
+describe('unlocked ballots', () => {
+  test('an unlocked row stops blocking its device, however the mark is typed', () => {
+    for (const mark of ['unlocked', 'UNLOCKED', ' Unlocked ']) {
+      const rows = [row({ device: DEVICE, isVoid: mark })];
+      assert.equal(hasDevice(rows, DEVICE), false, mark);
+      assert.equal(checkVote(OPEN, rows, ballot()).ok, true, mark);
+    }
+  });
+
+  test('the same device is blocked again once its new ballot is in', () => {
+    const rows = [row({ device: DEVICE, isVoid: 'unlocked' }), row({ device: DEVICE })];
+    assert.equal(checkVote(OPEN, rows, ballot()).error, 'already_voted');
+  });
+
+  test('an unlocked ballot counts for nothing', () => {
+    const rows = [row({ picks: [12, 1, 1, 1], isVoid: 'unlocked' }), row({ picks: [4, 1, 1, 1] })];
+    assert.deepEqual(tally(rows).best, [{ number: 4, votes: 1 }]);
+    assert.equal(hostResponse(OPEN, rows, 'now').ballotCount, 1);
+    assert.equal(hostResponse(OPEN, rows, 'now').voidCount, 1);
+  });
+
+  test('an unlocked ballot is never flagged as a same-phone match for the new one', () => {
+    const rows = [row({ print: 'same', isVoid: 'unlocked' }), row({ print: 'same' })];
+    assert.deepEqual(flagGroups(rows), []);
+  });
+
+  test('the host snapshot tells unlocked from a plain void', () => {
+    const rows = [row({ id: 'a' }), row({ id: 'b', isVoid: 'x' }), row({ id: 'c', isVoid: 'unlocked' })];
+    const byId = Object.fromEntries(hostResponse(OPEN, rows, 'now').ballots.map((b) => [b.ballotId, b]));
+    assert.deepEqual([byId.a.void, byId.a.unlocked], [false, false]);
+    assert.deepEqual([byId.b.void, byId.b.unlocked], [true, false]);
+    assert.deepEqual([byId.c.void, byId.c.unlocked], [true, true]);
+  });
+
+  test('unlockedRefs lists the ballot and its device', () => {
+    const rows = [row({ id: 'b_old', device: DEVICE, isVoid: 'unlocked' })];
+    assert.deepEqual(unlockedRefs(rows), ['b_old', DEVICE]);
+  });
+
+  test('unlockedRefs drops the device once it has a new ballot, and never lists the new ballot', () => {
+    const rows = [
+      row({ id: 'b_old', device: DEVICE, isVoid: 'unlocked' }),
+      row({ id: 'b_new', device: DEVICE }),
+    ];
+    assert.deepEqual(unlockedRefs(rows), ['b_old']);
+  });
+
+  test('unlockedRefs leaves out plain voids and live ballots, whose phones stay locked', () => {
+    assert.deepEqual(unlockedRefs([row({ id: 'a' }), row({ id: 'b', isVoid: 'x' })]), []);
+  });
+});
+
 describe('buildRow', () => {
   test('puts each value in its named column, leaving void blank', () => {
     const { clean } = validateBallot(ballot(), 30);
@@ -397,6 +449,7 @@ describe('hostResponse', () => {
       name: 'Dana',
       picks: { best: 12, favorite: 7, most_discount: 21, runner_up: 3 },
       void: false,
+      unlocked: false,
       flagGroup: 0,
     });
     assert.equal(res.ballots[0].void, true);

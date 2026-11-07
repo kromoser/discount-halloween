@@ -1,8 +1,8 @@
-// Host page: login, dashboard and polling. It changes only the voting status.
-// Everything else is fixed in the Sheet. Guest names are untrusted, so all text goes
-// in through textContent, never as HTML: this page holds the host password.
+// Host page: login, dashboard and polling. It changes the voting status and unlocks
+// ballots. Everything else is fixed in the Sheet. Guest names are untrusted, so all text
+// goes in through textContent, never as HTML: this page holds the host password.
 
-import { host, setStatus } from './api.js';
+import { host, setStatus, unlockBallot } from './api.js';
 import { POLL_HOST_MS, SHEET_URL } from './config.js';
 
 const CATEGORIES = [
@@ -14,7 +14,7 @@ const CATEGORIES = [
 
 const PASSWORD_KEY = 'dh.hostPass';
 const CONFIRM_MS = 5000;
-// A second tap this soon is one accidental double-tap, not a decision to close.
+// A second tap this soon is one accidental double-tap, not a decision.
 const DOUBLE_TAP_MS = 400;
 const TOP_BARS = 3;
 
@@ -30,10 +30,13 @@ const $ = (id) => document.getElementById(id);
 const state = {
   password: null,
   data: null,
-  confirming: false,
-  confirmStarted: 0,
+  // What the next tap would confirm: { kind: 'status' | 'ballot', value }. One at a time.
+  armed: null,
+  armedAt: 0,
   busy: false,
   actionError: '',
+  unlocking: null,
+  unlockError: '',
   pollProblem: '',
 };
 
@@ -101,25 +104,37 @@ function renderHeader({ status, ballotCount, boardSize, flagGroups }) {
   $('stat-flagged').classList.toggle('is-flagged', flagged > 0);
 }
 
+const STATUS_LABEL = { SOON: 'Soon', OPEN: 'Open', CLOSED: 'Closed' };
+
+// What guests see now.
+const STATUS_NOW = {
+  SOON: 'Guests see "Voting opens soon."',
+  OPEN: 'Guests can vote.',
+  CLOSED: 'Guests now see results.',
+};
+
+// What the second tap would do.
+function statusHelp(armed, status) {
+  if (armed === 'CLOSED') return "Closing shows results on every guest's phone.";
+  if (armed === 'SOON') return 'Guests go back to "Voting opens soon" and can\'t vote.';
+  return status === 'CLOSED' ? 'Results go away and guests can vote again.' : 'Guests can start voting.';
+}
+
 function renderActions() {
-  const status = state.data.status;
-  const confirming = status === 'OPEN' && state.confirming;
+  const { status } = state.data;
+  const armed = armedValue('status');
 
-  $('open-voting').hidden = status !== 'SOON';
-  $('close-voting').hidden = status !== 'OPEN' || confirming;
-  $('confirm-close').hidden = !confirming;
-  $('cancel-close').hidden = !confirming;
-  $('reopen-voting').hidden = status !== 'CLOSED';
-
-  let helper = '';
-  if (status === 'OPEN' && !confirming) helper = "Closing shows results on every guest's phone.";
-  if (status === 'CLOSED') helper = 'Guests now see results.';
-  $('action-helper').textContent = helper;
-  $('action-helper').hidden = !helper;
-
-  ['open-voting', 'close-voting', 'confirm-close', 'reopen-voting'].forEach((id) => {
-    $(id).disabled = state.busy;
+  $('status-control').querySelectorAll('button').forEach((button) => {
+    const { value } = button.dataset;
+    button.classList.toggle('is-current', value === status);
+    button.classList.toggle('is-armed', value === armed);
+    button.setAttribute('aria-pressed', String(value === status));
+    button.textContent = value === armed ? 'Tap again' : STATUS_LABEL[value];
+    button.disabled = state.busy;
   });
+
+  $('status-cancel').hidden = !armed;
+  $('action-helper').textContent = armed ? statusHelp(armed, status) : STATUS_NOW[status];
 
   $('action-error').textContent = state.actionError;
   $('action-error').hidden = !state.actionError;
@@ -161,18 +176,39 @@ function renderLiveResults({ tallies, ballotCount }) {
   }));
 }
 
-function ballotRow(ballot, { showTags }) {
+function unlockButton(ballot) {
+  const armed = armedValue('ballot') === ballot.ballotId;
+  const unlocking = state.unlocking === ballot.ballotId;
+
+  let text = 'Unlock';
+  if (armed) text = 'Tap again';
+  if (unlocking) text = 'Unlocking…';
+
+  const button = el('button', armed ? 'row__unlock is-armed' : 'row__unlock', text);
+  button.type = 'button';
+  button.dataset.ballot = ballot.ballotId;
+  button.disabled = Boolean(state.unlocking);
+  button.setAttribute('aria-label', armed ? `Tap again to unlock ${ballot.name}` : `Unlock ${ballot.name}`);
+  return button;
+}
+
+function ballotRow(ballot, { showTags, canUnlock = false }) {
   const row = el('div', 'row');
   row.classList.toggle('is-void', ballot.void);
 
   const top = el('span', 'row__top');
   top.append(el('span', 'row__name', ballot.name));
-  if (showTags && ballot.void) top.append(el('span', 'tag tag--void', 'Void'));
+  if (showTags && ballot.void) top.append(el('span', 'tag tag--void', ballot.unlocked ? 'Unlocked' : 'Void'));
   if (showTags && ballot.flagGroup !== null) top.append(el('span', 'tag tag--flag', 'Flag'));
 
   const time = formatTime(ballot.submittedAt);
   const meta = time ? `${time} · ${picksText(ballot.picks)}` : picksText(ballot.picks);
   row.append(top, el('span', 'row__meta', meta));
+
+  if (canUnlock && !ballot.unlocked) {
+    row.classList.add('row--unlockable');
+    row.append(unlockButton(ballot));
+  }
   return row;
 }
 
@@ -191,10 +227,16 @@ function renderFlags({ flagGroups, ballots }) {
   if (SHEET_URL) $('sheet-link').href = SHEET_URL;
 }
 
-function renderBallots({ ballots }) {
+function renderBallots() {
+  const { ballots, status } = state.data;
+  // Closed is final until reopened: unlocking then would change results guests have seen.
+  const canUnlock = status !== 'CLOSED';
+  $('unlock-helper').hidden = !canUnlock;
+  $('unlock-error').textContent = state.unlockError;
+  $('unlock-error').hidden = !state.unlockError;
   $('ballot-rows').replaceChildren(
     ...(ballots.length
-      ? ballots.map((ballot) => ballotRow(ballot, { showTags: true }))
+      ? ballots.map((ballot) => ballotRow(ballot, { showTags: true, canUnlock }))
       : [el('p', 'muted-note empty-row', 'No ballots yet.')]),
   );
 }
@@ -210,7 +252,8 @@ function renderDashboard() {
   renderActions();
   renderLiveResults(data);
   renderFlags(data);
-  renderBallots(data);
+  // Rebuilding the rows under an armed button could swallow its second tap.
+  if (!armedValue('ballot')) renderBallots();
   renderFooter();
 }
 
@@ -246,10 +289,12 @@ function enterDashboard(password, data) {
 
 function returnToLogin(message = '') {
   stopPolling();
-  cancelConfirm();
+  disarm();
   state.data = null;
   state.busy = false;
   state.actionError = '';
+  state.unlocking = null;
+  state.unlockError = '';
   forgetPassword();
   showLoginError(message);
   showScreen('login');
@@ -321,7 +366,8 @@ async function poll() {
   if (res && res.ok) {
     state.data = res;
     state.pollProblem = '';
-    if (res.status !== 'OPEN') cancelConfirm();
+    // The status moved on without this device, so the ask no longer applies.
+    if (armedValue('status') === res.status || (armedValue('ballot') && res.status === 'CLOSED')) disarm();
     renderDashboard();
   } else if (res && res.error === 'bad_password') {
     // The password was changed.
@@ -345,18 +391,54 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-/* ---------- Status actions ---------- */
+/* ---------- Two taps ---------- */
 
-let confirmTimer = null;
+// Everything this page changes reaches guests' phones, so each change takes two taps.
 
-function cancelConfirm() {
-  clearTimeout(confirmTimer);
-  confirmTimer = null;
-  state.confirming = false;
+let armTimer = null;
+
+function armedValue(kind) {
+  return state.armed && state.armed.kind === kind ? state.armed.value : null;
 }
 
+function disarm() {
+  clearTimeout(armTimer);
+  armTimer = null;
+  state.armed = null;
+}
+
+function renderTaps() {
+  renderActions();
+  renderBallots();
+  const armedRow = $('ballot-rows').querySelector('.row__unlock.is-armed');
+  if (armedRow) armedRow.focus();
+}
+
+function arm(kind, value) {
+  disarm();
+  state.armed = { kind, value };
+  state.armedAt = Date.now();
+  armTimer = setTimeout(() => {
+    disarm();
+    renderTaps();
+  }, CONFIRM_MS);
+  renderTaps();
+}
+
+// True if this tap is the one that confirms. The first tap arms, a tap on something
+// else moves the ask there, and an accidental double-tap leaves the ask as it is.
+function isSecondTap(kind, value) {
+  if (armedValue(kind) !== value) {
+    arm(kind, value);
+    return false;
+  }
+  return Date.now() - state.armedAt >= DOUBLE_TAP_MS;
+}
+
+/* ---------- Status control ---------- */
+
 async function changeStatus(status) {
-  cancelConfirm();
+  disarm();
   state.busy = true;
   state.actionError = '';
   renderActions();
@@ -381,30 +463,64 @@ async function changeStatus(status) {
   }
 }
 
-$('open-voting').addEventListener('click', () => changeStatus('OPEN'));
-$('reopen-voting').addEventListener('click', () => changeStatus('OPEN'));
-
-$('close-voting').addEventListener('click', () => {
-  state.confirming = true;
-  state.confirmStarted = Date.now();
+$('status-control').addEventListener('click', (event) => {
+  const button = event.target.closest('button');
+  if (!button || !state.data) return;
+  const { value } = button.dataset;
   state.actionError = '';
-  confirmTimer = setTimeout(() => {
-    cancelConfirm();
-    renderActions();
-  }, CONFIRM_MS);
-  renderActions();
-  $('confirm-close').focus();
+  if (value === state.data.status) {
+    // Tapping where things already stand backs out of any ask.
+    disarm();
+    renderTaps();
+    return;
+  }
+  if (isSecondTap('status', value)) changeStatus(value);
 });
 
-$('confirm-close').addEventListener('click', () => {
-  if (Date.now() - state.confirmStarted < DOUBLE_TAP_MS) return;
-  changeStatus('CLOSED');
+$('status-cancel').addEventListener('click', () => {
+  disarm();
+  renderTaps();
+  const current = $('status-control').querySelector('.is-current');
+  if (current) current.focus();
 });
 
-$('cancel-close').addEventListener('click', () => {
-  cancelConfirm();
-  renderActions();
-  $('close-voting').focus();
+/* ---------- Unlocking a ballot ---------- */
+
+async function unlockRow(ballotId) {
+  disarm();
+  state.unlocking = ballotId;
+  state.unlockError = '';
+  renderBallots();
+
+  let res = null;
+  try {
+    res = await unlockBallot(state.password, ballotId);
+  } catch {
+    // Handled below as no response.
+  }
+  state.unlocking = null;
+  if (!state.password) return; // A poll sent us back to Login while this was in flight.
+
+  if (res && res.ok) {
+    // Show it right away. The poll brings the new counts.
+    const ballot = state.data.ballots.find((b) => b.ballotId === ballotId);
+    if (ballot) Object.assign(ballot, { void: true, unlocked: true });
+    renderBallots();
+    poll();
+  } else if (res && res.error === 'bad_password') {
+    returnToLogin();
+  } else {
+    state.unlockError = res && res.error === 'too_many_attempts' ? MESSAGE.tooMany : MESSAGE.retry;
+    renderBallots();
+  }
+}
+
+$('ballot-rows').addEventListener('click', (event) => {
+  const button = event.target.closest('.row__unlock');
+  if (!button) return;
+  const ballotId = button.dataset.ballot;
+  state.unlockError = '';
+  if (isSecondTap('ballot', ballotId)) unlockRow(ballotId);
 });
 
 /* ---------- Start ---------- */

@@ -156,6 +156,17 @@ function flagGroups(ballots) {
   return [...byPrint.values()].filter((ids) => ids.length >= 2);
 }
 
+// Mirrors unlockedRefs in Code.gs: a device is listed only while nothing else holds it.
+function unlockedRefs(ballots) {
+  const refs = [];
+  ballots.filter((b) => b.unlocked).forEach((b) => {
+    refs.push(b.ballotId);
+    const held = ballots.some((other) => !other.unlocked && other.deviceId === b.deviceId);
+    if (!held && !refs.includes(b.deviceId)) refs.push(b.deviceId);
+  });
+  return refs;
+}
+
 function stateResponse(db) {
   const res = { ok: true, status: db.status, boardSize: db.boardSize };
   if (db.status === 'CLOSED') {
@@ -196,7 +207,7 @@ function vote(db, body) {
   }
 
   const deviceId = body.deviceId.toLowerCase();
-  if (db.ballots.some((b) => b.deviceId === deviceId)) return error('already_voted');
+  if (db.ballots.some((b) => !b.unlocked && b.deviceId === deviceId)) return error('already_voted');
 
   const ballotId = `b_mock_${crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
   const submittedAt = new Date().toISOString();
@@ -240,6 +251,7 @@ function hostSnapshot(db) {
       name: b.name,
       picks: b.picks,
       void: b.void,
+      unlocked: Boolean(b.unlocked),
       flagGroup: groupOf.has(b.ballotId) ? groupOf.get(b.ballotId) : null,
     })).reverse(),
     serverTime: new Date().toISOString(),
@@ -259,6 +271,16 @@ function route(db, body) {
     if (!STATUSES.includes(body.status)) return error('bad_request');
     db.status = body.status;
     return { ok: true, status: db.status };
+  }
+  if (body.action === 'unlock') {
+    const problem = checkPassword(db, body.password);
+    if (problem) return error(problem);
+    if (db.status === 'CLOSED') return error('closed');
+    const ballot = db.ballots.find((b) => b.ballotId === body.ballotId);
+    if (!ballot) return error('bad_request');
+    ballot.void = true;
+    ballot.unlocked = true;
+    return { ok: true, ballotId: ballot.ballotId };
   }
   return error('bad_request');
 }
@@ -284,10 +306,14 @@ function pause() {
 }
 
 export const backend = {
-  async getState() {
+  async getState(ref) {
     await pause();
     const db = load();
-    return consumeForced(db) || stateResponse(db);
+    const forced = consumeForced(db);
+    if (forced) return forced;
+    const res = stateResponse(db);
+    if (ref && unlockedRefs(db.ballots).includes(ref)) res.unlocked = true;
+    return res;
   },
 
   async post(payload) {
@@ -321,7 +347,10 @@ export const controls = {
   toggleVoid(ballotId) {
     const db = load();
     const ballot = db.ballots.find((b) => b.ballotId === ballotId);
-    if (ballot) ballot.void = !ballot.void;
+    if (ballot) {
+      ballot.void = !ballot.void;
+      ballot.unlocked = false;
+    }
     save(db);
   },
   // Empties the board, for testing no votes and ties.

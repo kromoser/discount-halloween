@@ -52,6 +52,10 @@ const LOCK_WAIT_MS = 75000;
 const LOCK_TRY_MS = 1000;
 const STATE_CACHE_KEY = 'state';
 const STATE_CACHE_SECONDS = 10;
+const UNLOCKS_CACHE_KEY = 'unlocks';
+// In the void column, this tosses a ballot and lets its phone vote again. Any other
+// non-blank value is a plain void, and that phone stays locked.
+const UNLOCKED_MARK = 'unlocked';
 const FAILURE_CACHE_KEY = 'host_password_failures';
 const MAX_PASSWORD_FAILURES = 10;
 const FAILURE_WINDOW_SECONDS = 600;
@@ -135,9 +139,28 @@ function validateBallot(body, boardSize) {
   };
 }
 
+function isUnlocked_(row) {
+  return String(row[COLS.void]).trim().toLowerCase() === UNLOCKED_MARK;
+}
+
+// Whether this device is locked out of voting. An unlocked row no longer holds it.
 function hasDevice(rows, deviceId) {
   const wanted = String(deviceId).toLowerCase();
-  return rows.some((row) => String(row[COLS.device_id]).toLowerCase() === wanted);
+  return rows.some((row) => !isUnlocked_(row) && String(row[COLS.device_id]).toLowerCase() === wanted);
+}
+
+// What a locked phone can ask about to learn it was unlocked. A phone with a receipt asks
+// by ballot ID, so its new ballot can't match an old entry, even in a cached copy of this
+// list. A phone told "already voted" has no ballot ID and asks by device, which is only
+// listed while that device has nothing else on file.
+function unlockedRefs(rows) {
+  const refs = [];
+  rows.filter(isUnlocked_).forEach((row) => {
+    refs.push(String(row[COLS.ballot_id]));
+    const device = String(row[COLS.device_id]).toLowerCase();
+    if (!hasDevice(rows, device) && refs.indexOf(device) === -1) refs.push(device);
+  });
+  return refs;
 }
 
 // Runs steps 1 to 5 of the vote contract, in order.
@@ -240,6 +263,7 @@ function rowToBallot_(row, flagGroup) {
     name: textOf_(row[COLS.name]).replace(/^'(?=[=+\-@])/, ''),
     picks: picks,
     void: isVoid_(row),
+    unlocked: isUnlocked_(row),
     flagGroup: flagGroup,
   };
 }
@@ -299,7 +323,7 @@ function parseBody(contents) {
 function doGet(e) {
   return respond_(() => {
     const action = e && e.parameter && e.parameter.action;
-    return action === 'state' ? handleState_() : errorResponse('bad_request');
+    return action === 'state' ? handleState_(e.parameter.ref) : errorResponse('bad_request');
   });
 }
 
@@ -310,6 +334,7 @@ function doPost(e) {
     if (body.action === 'vote') return handleVote_(body);
     if (body.action === 'host') return handleHost_(body);
     if (body.action === 'setStatus') return handleSetStatus_(body);
+    if (body.action === 'unlock') return handleUnlock_(body);
     return errorResponse('bad_request');
   });
 }
@@ -330,7 +355,15 @@ function respond_(handler) {
 
 /* ---------- Handlers ---------- */
 
-function handleState_() {
+// `ref` comes from a phone that has voted: see unlockedRefs. Other phones send none, and
+// only ever get the public state, so they never cost a read of the votes.
+function handleState_(ref) {
+  const json = publicState_();
+  if (!ref || cachedUnlockedRefs_().indexOf(ref) === -1) return json;
+  return JSON.stringify(Object.assign(JSON.parse(json), { unlocked: true }));
+}
+
+function publicState_() {
   const cache = CacheService.getScriptCache();
   const cached = cache.get(STATE_CACHE_KEY);
   if (cached) return cached;
@@ -340,6 +373,16 @@ function handleState_() {
   const json = JSON.stringify(stateResponse(settings, rows));
   cache.put(STATE_CACHE_KEY, json, STATE_CACHE_SECONDS);
   return json;
+}
+
+function cachedUnlockedRefs_() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(UNLOCKS_CACHE_KEY);
+  if (cached) return JSON.parse(cached);
+
+  const refs = unlockedRefs(readVotes_());
+  cache.put(UNLOCKS_CACHE_KEY, JSON.stringify(refs), STATE_CACHE_SECONDS);
+  return refs;
 }
 
 // Short attempts rather than one long waitLock: live, with waitLock(90000), the lock sat
@@ -381,6 +424,17 @@ function handleSetStatus_(body) {
   writeStatus_(body.status);
   CacheService.getScriptCache().remove(STATE_CACHE_KEY);
   return { ok: true, status: body.status };
+}
+
+// Refused once CLOSED, so a stray tap can't change results guests have already seen.
+// No lock: it changes one existing cell, and the host shouldn't queue behind a burst of votes.
+function handleUnlock_(body) {
+  const passwordError = checkPassword_(body.password);
+  if (passwordError) return errorResponse(passwordError);
+  if (readSettings_().status === 'CLOSED') return errorResponse('closed');
+  if (!writeUnlocked_(body.ballotId)) return errorResponse('bad_request');
+  CacheService.getScriptCache().remove(UNLOCKS_CACHE_KEY);
+  return { ok: true, ballotId: body.ballotId };
 }
 
 // Returns an error code, or null if the password is right. The lockout is checked
@@ -441,6 +495,19 @@ function appendVote_(row) {
   SpreadsheetApp.flush();
 }
 
+// False if there's no such ballot. The search skips the header, and a blank ID can't
+// match the blank rows the host cleared by hand.
+function writeUnlocked_(ballotId) {
+  if (typeof ballotId !== 'string' || !ballotId) return false;
+  const sheet = tab_(VOTES_TAB);
+  const index = sheet.getDataRange().getValues()
+    .findIndex((row, i) => i > 0 && String(row[COLS.ballot_id]) === ballotId);
+  if (index === -1) return false;
+  sheet.getRange(index + 1, COLS.void + 1).setValue(UNLOCKED_MARK);
+  SpreadsheetApp.flush();
+  return true;
+}
+
 function isoNow_() {
   return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ssXXX");
 }
@@ -467,7 +534,7 @@ function setup() {
 
   // A hint, not a rule: any non-blank value still counts as void.
   const voidHint = SpreadsheetApp.newDataValidation()
-    .requireValueInList(['x'], false)
+    .requireValueInList(['x', UNLOCKED_MARK], false)
     .setAllowInvalid(true)
     .setHelpText('Type x to void this ballot.')
     .build();
