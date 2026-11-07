@@ -134,6 +134,7 @@ button:focus-visible {
 .display--72 { font-size: 72px; }
 .display--64 { font-size: 64px; }
 .display--56 { font-size: 56px; }
+.display--36 { font-size: 36px; }
 .display__line { display: block; color: var(--orange); }
 
 .lede { margin: 0; font-size: 18px; color: var(--ink); }
@@ -160,6 +161,7 @@ button:focus-visible {
 .header-logo { display: flex; flex-direction: column; gap: 14px; }
 .header-logo .eyebrow { text-align: center; }
 .header-plain { display: flex; flex-direction: column; gap: 10px; }
+.closed-message { text-align: center; }
 .header-tight { display: flex; flex-direction: column; gap: 8px; }
 
 /* ---------- Text fields ---------- */
@@ -378,60 +380,6 @@ button:focus-visible {
   height: 10px;
   margin-top: -1px; /* Overlaps the paper, so the rotated slip shows no seam. */
   background: conic-gradient(from -45deg at 50% 100%, var(--paper) 90deg, transparent 0) 0 0 / 20px 10px repeat-x;
-}
-
-/* ---------- Winner tags ---------- */
-
-.winners { display: flex; flex-direction: column; gap: 12px; }
-
-.winner {
-  background: var(--paper);
-  color: var(--paper-ink);
-  display: flex;
-  flex-direction: column;
-}
-
-.winner__band {
-  background: var(--orange);
-  padding: 6px 12px;
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.winner__body {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 14px 12px;
-}
-
-.winner__number {
-  min-width: 0;
-  font-family: var(--font-display);
-  font-size: 64px;
-  line-height: 1;
-  text-transform: uppercase;
-  font-variant-numeric: tabular-nums;
-}
-
-.winner__pill {
-  flex: none;
-  background: var(--sticker);
-  color: var(--paper-ink);
-  border-radius: 999px;
-  padding: 6px 12px;
-  transform: rotate(6deg);
-  font-family: var(--font-display);
-  font-size: 18px;
-  line-height: 1.1;
-  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- Host dashboard ---------- */

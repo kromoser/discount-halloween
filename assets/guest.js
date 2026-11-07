@@ -19,11 +19,11 @@ const RETRY_DELAY_MS = 1000;
 const FAILURES_BEFORE_OFFLINE = 2;
 const NAME_MAX = 40;
 
-// Results don't poll: they only change through voids, and a reload picks those up.
-const POLLING_SCREENS = new Set(['soon', 'ballot', 'voted', 'offline']);
+// Closed polls too, so phones come back by themselves if the host reopens voting.
+const POLLING_SCREENS = new Set(['soon', 'ballot', 'voted', 'closed', 'offline']);
 // A failed poll must not throw a guest off these screens: the first holds their
-// half-filled form, and the second is already the final answer.
-const SURVIVES_FAILED_POLL = new Set(['ballot', 'results']);
+// half-filled form, and the second has nothing left to do.
+const SURVIVES_FAILED_POLL = new Set(['ballot', 'closed']);
 
 const $ = (id) => document.getElementById(id);
 
@@ -32,7 +32,7 @@ const screens = {
   soon: $('screen-soon'),
   ballot: $('screen-ballot'),
   voted: $('screen-voted'),
-  results: $('screen-results'),
+  closed: $('screen-closed'),
   offline: $('screen-offline'),
 };
 
@@ -118,8 +118,6 @@ function unlockRef() {
 const state = {
   status: null,
   boardSize: 30,
-  results: [],
-  ballotCount: 0,
   ballot: null,
   offline: false,
   casting: false,
@@ -128,7 +126,7 @@ const state = {
 function currentScreen() {
   if (state.offline) return 'offline';
   if (!state.status) return 'loading';
-  if (state.status === 'CLOSED') return 'results';
+  if (state.status === 'CLOSED') return state.ballot ? 'voted' : 'closed';
   if (state.status === 'SOON') return 'soon';
   return state.ballot ? 'voted' : 'ballot';
 }
@@ -312,6 +310,9 @@ function receiptLine(label, value) {
 function renderReceipt() {
   const { ballot } = state;
   const already = Boolean(ballot.alreadyVoted);
+  const closed = state.status === 'CLOSED';
+  $('voted-lede').hidden = closed;
+  $('voted-closed').hidden = !closed;
   $('receipt-detail').hidden = already;
   $('receipt-already').hidden = !already;
   if (already) return;
@@ -338,42 +339,12 @@ function reopenBallot() {
   updateForm();
 }
 
-function winnerCard(result) {
-  const count = result.winners.length;
-  const tie = count > 1;
-
-  let tag = 'Winner';
-  if (count === 0) tag = 'No votes';
-  if (tie) tag = 'Tie';
-
-  let votes = `${result.votes} ${result.votes === 1 ? 'vote' : 'votes'}`;
-  if (tie) votes = `${result.votes} each`;
-
-  const card = el('div', 'winner');
-  const band = el('div', 'winner__band');
-  band.append(el('span', '', result.label), el('span', '', tag));
-
-  const body = el('div', 'winner__body');
-  const number = count ? result.winners.map((n) => `#${n}`).join(' & ') : '–';
-  body.append(el('span', 'winner__number', number), el('span', 'winner__pill', votes));
-
-  card.append(band, body);
-  return card;
-}
-
-function renderResults() {
-  $('winners').replaceChildren(...state.results.map(winnerCard));
-  const noun = state.ballotCount === 1 ? 'ballot' : 'ballots';
-  $('results-footer').textContent = `${state.ballotCount} ${noun} · Winners, find the host`;
-}
-
 let shownScreen = 'loading';
 
 function render() {
   const screen = currentScreen();
   Object.entries(screens).forEach(([name, node]) => { node.hidden = name !== screen; });
   if (screen === 'voted') renderReceipt();
-  if (screen === 'results') renderResults();
   if (screen !== shownScreen) {
     shownScreen = screen;
     window.scrollTo(0, 0);
@@ -399,8 +370,6 @@ function applyState(res) {
   const boardChanged = res.boardSize !== state.boardSize;
   state.status = res.status;
   state.boardSize = res.boardSize;
-  state.results = res.results || [];
-  state.ballotCount = res.ballotCount || 0;
   state.offline = false;
   if (boardChanged) updateForm();
 }

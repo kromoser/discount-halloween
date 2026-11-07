@@ -6,7 +6,7 @@ import { loadCode } from './load-code.mjs';
 
 const {
   CATEGORIES, COLS, sanitizeName, validateBallot, hasDevice, checkVote, buildRow, tally,
-  winners, flagGroups, stateResponse, hostResponse, normalizeSettings, parseBody, unlockedRefs,
+  flagGroups, stateResponse, hostResponse, normalizeSettings, parseBody, unlockedRefs,
 } = loadCode();
 
 const DEVICE = '5b0e9c1a-1111-4222-8333-444455556666';
@@ -330,41 +330,6 @@ describe('tally', () => {
   });
 });
 
-describe('winners', () => {
-  test('returns the top number and its votes, in category order with labels', () => {
-    const rows = [row({ picks: [12, 7, 21, 3] }), row({ picks: [12, 7, 21, 3] }), row({ picks: [4, 8, 22, 5] })];
-    assert.deepEqual(winners(tally(rows)), [
-      { key: 'best', label: 'Best', winners: [12], votes: 2 },
-      { key: 'favorite', label: 'Favorite', winners: [7], votes: 2 },
-      { key: 'most_discount', label: 'Most discount', winners: [21], votes: 2 },
-      { key: 'runner_up', label: 'Runner up', winners: [3], votes: 2 },
-    ]);
-  });
-
-  test('a tie for first lists every tied number, lowest first', () => {
-    const rows = [
-      row({ picks: [18, 1, 1, 1] }), row({ picks: [18, 1, 1, 1] }),
-      row({ picks: [3, 1, 1, 1] }), row({ picks: [3, 1, 1, 1] }),
-      row({ picks: [9, 1, 1, 1] }),
-    ];
-    const best = winners(tally(rows))[0];
-    assert.deepEqual(best.winners, [3, 18]);
-    assert.equal(best.votes, 2);
-  });
-
-  test('voiding a ballot can change the winner', () => {
-    const rows = [
-      row({ picks: [18, 1, 1, 1] }), row({ picks: [18, 1, 1, 1], isVoid: 'x' }),
-      row({ picks: [3, 1, 1, 1] }), row({ picks: [3, 1, 1, 1] }),
-    ];
-    assert.deepEqual(winners(tally(rows))[0].winners, [3]);
-  });
-
-  test('a category with no votes has no winners', () => {
-    assert.deepEqual(winners(tally([]))[0], { key: 'best', label: 'Best', winners: [], votes: 0 });
-  });
-});
-
 describe('flagGroups', () => {
   test('groups ballots that share a fingerprint, in row order', () => {
     const rows = [
@@ -394,11 +359,9 @@ describe('flagGroups', () => {
 });
 
 describe('stateResponse', () => {
-  const rows = [row({ picks: [12, 7, 21, 3] }), row({ picks: [12, 7, 21, 3], isVoid: 'x' })];
-
-  for (const [name, settings] of [['OPEN', OPEN], ['SOON', SOON]]) {
-    test(`contains no counts while ${name}, in the raw JSON`, () => {
-      const res = stateResponse(settings, rows);
+  for (const [name, settings] of [['SOON', SOON], ['OPEN', OPEN], ['CLOSED', CLOSED]]) {
+    test(`contains no counts or results while ${name}, in the raw JSON`, () => {
+      const res = stateResponse(settings);
       assert.deepEqual(res, { ok: true, status: name, boardSize: 30 });
       const json = JSON.stringify(res);
       for (const word of ['ballotCount', 'results', 'votes', 'winners', 'tallies', 'voidCount']) {
@@ -406,19 +369,6 @@ describe('stateResponse', () => {
       }
     });
   }
-
-  test('returns results when CLOSED, excluding void rows from the count', () => {
-    const res = stateResponse(CLOSED, rows);
-    assert.equal(res.ballotCount, 1);
-    assert.equal(res.results.length, 4);
-    assert.deepEqual(res.results[0], { key: 'best', label: 'Best', winners: [12], votes: 1 });
-  });
-
-  test('never exposes ballot rows, names or fingerprints, even when CLOSED', () => {
-    const json = JSON.stringify(stateResponse(CLOSED, [row({ name: 'SecretName', print: 'beef' })]));
-    assert.equal(json.includes('SecretName'), false);
-    assert.equal(json.includes('beef'), false);
-  });
 });
 
 describe('hostResponse', () => {

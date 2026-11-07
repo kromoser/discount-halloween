@@ -106,7 +106,7 @@
   <header class="header-plain">
     <p class="eyebrow">Discount Halloween</p>
     <h1 class="display display--88 display--orange">Voted.</h1>
-    <p class="lede">Results show up here when the host closes voting.</p>
+    <p id="voted-lede" class="lede">Stay tuned for the winners!</p>
   </header>
 
   <div class="receipt">
@@ -132,16 +132,20 @@
     <div class="receipt__teeth" aria-hidden="true"></div>
   </div>
 
-  <p class="fine-print push-down">Keep this tab open</p>
+  <div id="voted-closed" class="header-plain closed-message" hidden>
+    <h2 class="display display--36 display--orange">Voting is closed.</h2>
+    <p class="lede">Stay tuned for the winners!</p>
+  </div>
 </section>
 
-<section id="screen-results" class="screen" hidden>
-  <header class="header-tight">
-    <p class="eyebrow">Discount Halloween · Voting closed</p>
-    <h1 class="display display--64 display--orange">Results</h1>
+<section id="screen-closed" class="screen screen--roomy" hidden>
+  <header class="header-logo">
+    <h1 class="logo"><img src="assets/logo.svg" alt="Discount Halloween" width="707" height="332"></h1>
   </header>
-  <div id="winners" class="winners"></div>
-  <p id="results-footer" class="fine-print push-down"></p>
+  <div class="header-plain closed-message">
+    <h2 class="display display--64 display--orange">Voting is closed.</h2>
+    <p class="lede">Stay tuned for the winners!</p>
+  </div>
 </section>
 
 <section id="screen-offline" class="screen screen--roomy" hidden>

@@ -112,7 +112,7 @@ describe('parity with Code.gs', () => {
     await bothSetStatus('CLOSED');
     const state = await backend.getState();
     assert.deepEqual(state, await real.getState());
-    assert.deepEqual(state.results[0].winners, [4, 12], 'a tie, lowest first');
+    assert.deepEqual(state, { ok: true, status: 'CLOSED', boardSize: 30 });
   });
 
   test('every vote outcome, in the same order of checks', async () => {
@@ -267,14 +267,12 @@ describe('mock mode', () => {
     assert.deepEqual(newest, ['Theo', 'Dana', 'Jules', 'Dana R.', 'Priya', 'Marcus']);
   });
 
-  test('state stays free of counts until closed', async () => {
+  test('state stays free of counts in every status', async () => {
     assert.deepEqual(await backend.getState(), { ok: true, status: 'OPEN', boardSize: 30 });
     controls.setStatus('SOON');
     assert.deepEqual(await backend.getState(), { ok: true, status: 'SOON', boardSize: 30 });
     controls.setStatus('CLOSED');
-    const closed = await backend.getState();
-    assert.equal(closed.ballotCount, 27);
-    assert.deepEqual(closed.results.at(-1), { key: 'runner_up', label: 'Runner up', winners: [3, 18], votes: 6 });
+    assert.deepEqual(await backend.getState(), { ok: true, status: 'CLOSED', boardSize: 30 });
   });
 
   test('state persists in localStorage, so tabs share it', async () => {

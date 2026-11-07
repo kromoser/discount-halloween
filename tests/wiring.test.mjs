@@ -89,13 +89,12 @@ describe('GET state', () => {
     assert.deepEqual(JSON.parse(raw), { ok: true, status: 'OPEN', boardSize: 30 });
   });
 
-  test('returns results when CLOSED', () => {
+  test('sends no counts or results when CLOSED either', () => {
     open();
     post(ballot());
     post({ action: 'setStatus', password: PASSWORD, status: 'CLOSED' });
-    const res = getState();
-    assert.equal(res.ballotCount, 1);
-    assert.deepEqual(res.results[0], { key: 'best', label: 'Best', winners: [12], votes: 1 });
+    const raw = code.doGet({ parameter: { action: 'state' } }).text;
+    assert.equal(raw, '{"ok":true,"status":"CLOSED","boardSize":30}');
   });
 
   test('is cached for 10 s, and setStatus clears the cache', () => {
@@ -334,7 +333,7 @@ describe('POST unlock', () => {
     assert.equal(votes().rows[1][10], '');
   });
 
-  test('is refused once voting is closed, so it cannot change revealed results', () => {
+  test('is refused once voting is closed, so it cannot change the count being announced', () => {
     open();
     const { ballotId } = post(ballot());
     post({ action: 'setStatus', password: PASSWORD, status: 'CLOSED' });
@@ -423,16 +422,13 @@ describe('POST unlock', () => {
     assert.deepEqual(Object.keys(stateFor(ballotId)).sort(), ['boardSize', 'ok', 'status', 'unlocked']);
   });
 
-  test('a phone unlocked before closing still gets results with its answer', () => {
+  test('a phone unlocked before closing still hears about it, with no counts', () => {
     open();
     const { ballotId } = post(ballot());
     post(ballot());
     unlock(ballotId);
     post({ action: 'setStatus', password: PASSWORD, status: 'CLOSED' });
-    const res = stateFor(ballotId);
-    assert.equal(res.unlocked, true);
-    assert.equal(res.ballotCount, 1);
-    assert.equal(res.results.length, 4);
+    assert.deepEqual(stateFor(ballotId), { ok: true, status: 'CLOSED', boardSize: 30, unlocked: true });
   });
 
   test('the list of unlocked ballots is cached for 10 s, and an unlock clears it', () => {

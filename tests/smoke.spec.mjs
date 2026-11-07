@@ -90,7 +90,7 @@ test.describe('guest page', () => {
     expect(label.y - (input.y + input.height)).toBeGreaterThanOrEqual(36);
   });
 
-  test('walks Soon, Ballot, Voted, Results, and a reload keeps the right screen', async ({ page }) => {
+  test('walks Soon, Ballot, Voted, and keeps the receipt once closed', async ({ page }) => {
     await openGuest(page, 'SOON');
     await expect(screen(page, 'soon')).toBeVisible();
     await expect(page.getByText('Voting opens soon.')).toBeVisible();
@@ -118,10 +118,9 @@ test.describe('guest page', () => {
 
     await setStatus(page, 'CLOSED');
     await page.reload();
-    await expect(screen(page, 'results')).toBeVisible();
-    await expect(page.locator('.winner')).toHaveCount(4);
-    await expect(page.locator('.winner').nth(0)).toContainText('#12');
-    await expect(page.locator('#results-footer')).toHaveText('28 ballots · Winners, find the host');
+    await expect(screen(page, 'voted')).toBeVisible();
+    await expect(page.locator('#receipt-customer')).toHaveText('Dana');
+    await expect(page.locator('#voted-closed')).toContainText('Voting is closed.');
   });
 
   test('saves the ballot and device ID to localStorage', async ({ page }) => {
@@ -152,7 +151,7 @@ test.describe('guest page', () => {
     expect(last.deviceId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  test('flips to Results by itself when the host closes, from any waiting screen', async ({ page }) => {
+  test('flips to Closed by itself when the host closes, from any waiting screen', async ({ page }) => {
     test.setTimeout(90000);
     await openGuest(page, 'SOON');
     await setStatus(page, 'OPEN');
@@ -160,7 +159,7 @@ test.describe('guest page', () => {
 
     await page.fill('#voter-name', 'half typed');
     await setStatus(page, 'CLOSED');
-    await expect(screen(page, 'results')).toBeVisible({ timeout: 25000 });
+    await expect(screen(page, 'closed')).toBeVisible({ timeout: 25000 });
   });
 
   test('a poll while filling in the ballot leaves the form alone', async ({ page }) => {
@@ -297,10 +296,10 @@ test.describe('submit outcomes', () => {
     await expect(page.locator('#name-error')).toBeHidden();
   });
 
-  test('closed re-fetches state and shows Results', async ({ page }) => {
+  test('closed re-fetches state and shows Closed', async ({ page }) => {
     await setStatus(page, 'CLOSED');
     await page.click('#cast');
-    await expect(screen(page, 'results')).toBeVisible();
+    await expect(screen(page, 'closed')).toBeVisible();
   });
 
   test('not_open re-fetches state and shows Soon', async ({ page }) => {
@@ -405,54 +404,127 @@ test.describe('connection trouble', () => {
   });
 });
 
-test.describe('results', () => {
-  test('a tie shows both numbers and "each"', async ({ page }) => {
+test.describe('closed screen', () => {
+  test('shows the logo and the message, and no results', async ({ page }) => {
     await openGuest(page, 'CLOSED');
-    const tie = page.locator('.winner').nth(3);
-    await expect(tie).toContainText('Runner up');
-    await expect(tie).toContainText('Tie');
-    await expect(tie).toContainText('#3 & #18');
-    await expect(tie).toContainText('6 each');
+    const closed = screen(page, 'closed');
+    await expect(closed).toBeVisible();
+    await expect.poll(() => closed.locator('.logo img').evaluate((img) => img.naturalWidth)).toBeGreaterThan(0);
+    await expect(closed.getByText('Voting is closed.', { exact: true })).toBeVisible();
+    await expect(closed.getByText('Stay tuned for the winners!', { exact: true })).toBeVisible();
+    await expect(closed.getByText('Voting is closed.', { exact: true })).toHaveCSS('text-align', 'center');
+    await expect(closed.getByText('Stay tuned for the winners!', { exact: true })).toHaveCSS('text-align', 'center');
+    expect(await closed.innerText()).not.toMatch(/#|\d|winner:|ballots/i);
   });
 
-  test('a winner shows its votes', async ({ page }) => {
+  test('a guest who never voted gets this screen, with no receipt', async ({ page }) => {
     await openGuest(page, 'CLOSED');
-    const best = page.locator('.winner').nth(0);
-    await expect(best).toContainText('Winner');
-    await expect(best).toContainText('#12');
-    await expect(best).toContainText('11 votes');
-  });
-
-  test('no ballots at all still renders, with singular wording right', async ({ page }) => {
-    await page.goto(GUEST);
-    await page.waitForFunction(() => window.dhMock);
-    await page.evaluate(() => {
-      window.dhMock.clearBallots();
-      window.dhMock.setStatus('CLOSED');
-    });
-    await page.reload();
-    await expect(page.locator('.winner').nth(0)).toContainText('No votes');
-    await expect(page.locator('.winner').nth(0)).toContainText('0 votes');
-    await expect(page.locator('#results-footer')).toHaveText('0 ballots · Winners, find the host');
-  });
-
-  test('a guest who never voted still sees Results', async ({ page }) => {
-    await openGuest(page, 'CLOSED');
-    await expect(screen(page, 'results')).toBeVisible();
+    await expect(screen(page, 'closed')).toBeVisible();
+    await expect(screen(page, 'voted')).toBeHidden();
     expect(await page.evaluate(() => localStorage.getItem('dh.ballot'))).toBeNull();
+  });
+
+  async function voteThenClose(page) {
+    await openGuest(page);
+    await fillBallot(page, { name: 'Dana' });
+    await page.click('#cast');
+    await expect(screen(page, 'voted')).toBeVisible();
+    await setStatus(page, 'CLOSED');
+    await page.reload();
+    await expect(screen(page, 'voted')).toBeVisible();
+  }
+
+  test('a guest who voted keeps the receipt, with the message below it, centered', async ({ page }) => {
+    await voteThenClose(page);
+    await expect(screen(page, 'closed')).toBeHidden();
+    await expect(page.locator('#receipt-customer')).toHaveText('Dana');
+    await expect(page.locator('#receipt-picks')).toContainText('#12');
+
+    const message = page.locator('#voted-closed');
+    await expect(message.getByText('Voting is closed.', { exact: true })).toBeVisible();
+    await expect(message.getByText('Voting is closed.', { exact: true })).toHaveCSS('text-align', 'center');
+    await expect(message.getByText('Stay tuned for the winners!', { exact: true })).toBeVisible();
+    await expect(message.getByText('Stay tuned for the winners!', { exact: true })).toHaveCSS('text-align', 'center');
+
+    const receipt = await page.locator('.receipt').boundingBox();
+    const box = await message.boundingBox();
+    expect(box.y).toBeGreaterThan(receipt.y + receipt.height);
+  });
+
+  test('the message says it once, with no results', async ({ page }) => {
+    await voteThenClose(page);
+    await expect(page.locator('#voted-lede')).toBeHidden();
+    await expect(page.getByText('Stay tuned for the winners!', { exact: true }).locator('visible=true')).toHaveCount(1);
+    expect(await page.locator('#voted-closed').innerText()).not.toMatch(/#|\d|ballots/i);
+  });
+
+  test('the message arrives by itself on a poll, and leaves if voting reopens', async ({ page }) => {
+    test.setTimeout(90000);
+    await openGuest(page);
+    await fillBallot(page);
+    await page.click('#cast');
+    await expect(screen(page, 'voted')).toBeVisible();
+    await expect(page.locator('#voted-closed')).toBeHidden();
+    await expect(page.locator('#voted-lede')).toBeVisible();
+
+    await setStatus(page, 'CLOSED');
+    await expect(page.locator('#voted-closed')).toBeVisible({ timeout: 25000 });
+    await expect(page.locator('#voted-lede')).toBeHidden();
+
+    await setStatus(page, 'OPEN');
+    await expect(page.locator('#voted-closed')).toBeHidden({ timeout: 25000 });
+    await expect(page.locator('#voted-lede')).toBeVisible();
+    await expect(screen(page, 'voted')).toBeVisible();
+  });
+
+  test('a phone told "already voted" gets the message too', async ({ page }) => {
+    await voteThenClose(page);
+    await page.evaluate(() => localStorage.setItem('dh.ballot', JSON.stringify({ alreadyVoted: true })));
+    await page.reload();
+    await expect(page.locator('#receipt-already')).toBeVisible();
+    await expect(page.locator('#voted-closed')).toBeVisible();
+  });
+
+  test('the receipt no longer promises results on the phone', async ({ page }) => {
+    await openGuest(page);
+    await fillBallot(page);
+    await page.click('#cast');
+    await expect(screen(page, 'voted')).toContainText('Stay tuned for the winners!');
+    expect(await screen(page, 'voted').innerText()).not.toMatch(/results|keep this tab/i);
+  });
+
+  test('comes back by itself if the host reopens voting', async ({ page }) => {
+    test.setTimeout(60000);
+    await openGuest(page, 'CLOSED');
+    await expect(screen(page, 'closed')).toBeVisible();
+    await setStatus(page, 'OPEN');
+    await expect(screen(page, 'ballot')).toBeVisible({ timeout: 25000 });
+  });
+
+  test('stays up through failed polls', async ({ page }) => {
+    await openGuest(page, 'CLOSED');
+    await expect(screen(page, 'closed')).toBeVisible();
+    for (let i = 0; i < 2; i += 1) {
+      await failNext(page, 'network');
+      await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+      await page.waitForTimeout(600);
+    }
+    await expect(screen(page, 'closed')).toBeVisible();
+    await expect(screen(page, 'offline')).toBeHidden();
   });
 });
 
 test.describe('secrecy and safety', () => {
-  test('a guest page shows no counts while voting is open', async ({ page }) => {
-    await openGuest(page);
-    await expect(screen(page, 'ballot')).toBeVisible();
-    const res = await page.evaluate(async () => {
-      const mock = await import('/assets/mock-api.js');
-      return mock.backend.getState();
+  for (const status of ['SOON', 'OPEN', 'CLOSED']) {
+    test(`a guest page is sent no counts or results while ${status}`, async ({ page }) => {
+      await openGuest(page, status);
+      const res = await page.evaluate(async () => {
+        const mock = await import('/assets/mock-api.js');
+        return mock.backend.getState();
+      });
+      expect(res).toEqual({ ok: true, status, boardSize: 30 });
     });
-    expect(res).toEqual({ ok: true, status: 'OPEN', boardSize: 30 });
-  });
+  }
 
   test('the mock is never loaded without ?mock=1, and no page code holds it', async ({ page }) => {
     await page.route('**/assets/config.js', async (route) => {
@@ -746,7 +818,7 @@ test.describe('host status control', () => {
   for (const [status, pill, helper] of [
     ['SOON', 'Voting soon', 'Guests see "Voting opens soon."'],
     ['OPEN', 'Voting open', 'Guests can vote.'],
-    ['CLOSED', 'Closed', 'Guests now see results.'],
+    ['CLOSED', 'Closed', 'Guests see "Voting is closed."'],
   ]) {
     test(`${status}: shows all three choices with the current one filled`, async ({ page }) => {
       await openHost(page, status);
@@ -780,14 +852,14 @@ test.describe('host status control', () => {
     await statusOption(page, 'CLOSED').click();
     await expect(statusOption(page, 'CLOSED')).toHaveText('Tap again');
     await expect(statusOption(page, 'CLOSED')).toHaveCSS('background-color', YELLOW);
-    await expect(page.locator('#action-helper')).toHaveText("Closing shows results on every guest's phone.");
+    await expect(page.locator('#action-helper')).toHaveText("Closing ends voting on every guest's phone.");
     await expect(page.locator('#status-cancel')).toBeVisible();
   });
 
   test('each move explains itself', async ({ page }) => {
     await openHost(page, 'CLOSED');
     await statusOption(page, 'OPEN').click();
-    await expect(page.locator('#action-helper')).toHaveText('Results go away and guests can vote again.');
+    await expect(page.locator('#action-helper')).toHaveText('Guests can vote again.');
     await statusOption(page, 'SOON').click();
     await expect(page.locator('#action-helper')).toHaveText('Guests go back to "Voting opens soon" and can\'t vote.');
   });
@@ -1057,9 +1129,9 @@ test.describe('host polling', () => {
 
 test.describe('host and guest together', () => {
   // The check for build step 6: closing on the host tab flips an open guest tab to
-  // Results within one poll. Tabs in one context share localStorage, like the real mock.
+  // Closed within one poll. Tabs in one context share localStorage, like the real mock.
   for (const start of ['ballot', 'voted']) {
-    test(`closing flips a guest tab on the ${start} screen to Results within one poll`, async ({ context }) => {
+    test(`closing flips a guest tab on the ${start} screen to show voting is closed within one poll`, async ({ context }) => {
       test.setTimeout(60000);
       const guest = await context.newPage();
       await guest.goto(GUEST);
@@ -1078,8 +1150,9 @@ test.describe('host and guest together', () => {
       await expect(hostTab.locator('#status-text')).toHaveText('Closed');
 
       // One poll is 20 s plus up to 3 s of jitter.
-      await expect(screen(guest, 'results')).toBeVisible({ timeout: 24000 });
-      await expect(guest.locator('.winner').nth(3)).toContainText('Runner up');
+      const message = start === 'voted' ? guest.locator('#voted-closed') : screen(guest, 'closed');
+      await expect(message).toBeVisible({ timeout: 24000 });
+      await expect(message).toContainText('Stay tuned for the winners!');
 
       await chooseStatus(hostTab, 'OPEN');
       await expect(hostTab.locator('#status-text')).toHaveText('Voting open');
@@ -1192,7 +1265,6 @@ test.describe('host and guest together', () => {
     const guest = await context.newPage();
     await guest.goto(GUEST);
     await expect(screen(guest, 'ballot')).toBeVisible();
-    await expect(guest.locator('.winner')).toHaveCount(0);
     expect(await guest.locator('body').innerText()).not.toMatch(/\bballots ·|\bvotes\b/i);
   });
 });
@@ -1363,7 +1435,7 @@ test.describe('at 320 px wide', () => {
     return scrollWidth <= clientWidth;
   });
 
-  for (const [status, name] of [['SOON', 'soon'], ['OPEN', 'ballot'], ['CLOSED', 'results']]) {
+  for (const [status, name] of [['SOON', 'soon'], ['OPEN', 'ballot'], ['CLOSED', 'closed']]) {
     test(`the ${name} screen does not scroll sideways`, async ({ page }) => {
       await openGuest(page, status);
       await expect(screen(page, name)).toBeVisible();
@@ -1377,28 +1449,6 @@ test.describe('at 320 px wide', () => {
     await fillBallot(page, { name: 'W'.repeat(40) });
     await page.click('#cast');
     await expect(screen(page, 'voted')).toBeVisible();
-    expect(await fitsWidth(page)).toBe(true);
-  });
-
-  test('a tie of four does not run off the card', async ({ page }) => {
-    await page.goto(GUEST);
-    await page.waitForFunction(() => window.dhMock);
-    await page.evaluate(() => {
-      const db = window.dhMock.state();
-      db.status = 'CLOSED';
-      db.ballots = [11, 22, 23, 24].map((n, i) => ({
-        ...db.ballots[0],
-        ballotId: `b_${i}`,
-        deviceId: `00000000-0000-4000-8000-00000000000${i}`,
-        fingerprint: `f${i}`,
-        void: false,
-        picks: { best: n, favorite: n, most_discount: n, runner_up: n },
-      }));
-      localStorage.setItem('dh.mock', JSON.stringify(db));
-    });
-    await page.reload();
-    await expect(page.locator('.winner').first()).toContainText('#11 & #22 & #23 & #24');
-    await page.evaluate(() => document.fonts.ready);
     expect(await fitsWidth(page)).toBe(true);
   });
 

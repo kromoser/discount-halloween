@@ -8,7 +8,7 @@ import vm from 'node:vm';
 
 const NAMES = [
   'CATEGORIES', 'COLS', 'errorResponse', 'sanitizeName', 'validateBallot', 'hasDevice',
-  'checkVote', 'buildRow', 'tally', 'winners', 'flagGroups', 'stateResponse', 'hostResponse',
+  'checkVote', 'buildRow', 'tally', 'flagGroups', 'stateResponse', 'hostResponse',
   'normalizeSettings', 'parseBody', 'unlockedRefs',
 ];
 

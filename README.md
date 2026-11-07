@@ -1,6 +1,6 @@
 # Discount Halloween Ballot
 
-A phone-first costume ballot for a 30-guest party. Guests type their name and four Polaroid numbers. The host watches live tallies on a password-protected page and closes voting, which flips every phone to the results.
+A phone-first costume ballot for a 30-guest party. Guests type their name and four Polaroid numbers. The host watches live tallies on a password-protected page and closes voting, which shows "Voting is closed. Stay tuned for the winners!" on every phone, under the receipt if that guest voted. The host announces the winners from the host page.
 
 Two static pages on GitHub Pages talk to one Google Apps Script web app, which is the only thing that can read the private Google Sheet. The full spec is [docs/PLAN.md](docs/PLAN.md).
 

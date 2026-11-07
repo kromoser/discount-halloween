@@ -168,17 +168,7 @@ function unlockedRefs(ballots) {
 }
 
 function stateResponse(db) {
-  const res = { ok: true, status: db.status, boardSize: db.boardSize };
-  if (db.status === 'CLOSED') {
-    const tallies = tally(db.ballots);
-    res.ballotCount = db.ballots.filter((b) => !b.void).length;
-    res.results = CATEGORIES.map(({ key, label }) => {
-      const list = tallies[key];
-      const top = list.length ? list[0].votes : 0;
-      return { key, label, winners: list.filter((t) => t.votes === top).map((t) => t.number), votes: top };
-    });
-  }
-  return res;
+  return { ok: true, status: db.status, boardSize: db.boardSize };
 }
 
 function vote(db, body) {

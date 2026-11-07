@@ -208,20 +208,6 @@ function tally(rows) {
   return out;
 }
 
-// Each category's top numbers. More than one number means a tie.
-function winners(tallies) {
-  return CATEGORIES.map((cat) => {
-    const list = tallies[cat.key] || [];
-    const top = list.length ? list[0].votes : 0;
-    return {
-      key: cat.key,
-      label: cat.label,
-      winners: list.filter((t) => t.votes === top).map((t) => t.number),
-      votes: top,
-    };
-  });
-}
-
 // Sets of two or more non-void ballots sharing a fingerprint, as ballot IDs.
 function flagGroups(rows) {
   const byPrint = new Map();
@@ -239,14 +225,10 @@ function countValid_(rows) {
   return rows.filter((row) => !isVoid_(row)).length;
 }
 
-// Public response. Must never include counts of any kind unless CLOSED.
-function stateResponse(settings, rows) {
-  const res = { ok: true, status: settings.status, boardSize: settings.boardSize };
-  if (settings.status === 'CLOSED') {
-    res.ballotCount = countValid_(rows);
-    res.results = winners(tally(rows));
-  }
-  return res;
+// Public response. Must never include counts or results of any kind, in any status: the
+// winners are announced at the party, and anyone can read this in their browser.
+function stateResponse(settings) {
+  return { ok: true, status: settings.status, boardSize: settings.boardSize };
 }
 
 function textOf_(v) {
@@ -294,7 +276,7 @@ function hostResponse(settings, rows, serverTime) {
 }
 
 // Settings tab rows as [key, value]. Anything unreadable falls back to the safe default:
-// an unknown status behaves as SOON, so a typo in the cell can't reveal results.
+// an unknown status behaves as SOON, so a typo in the cell can't open or close voting.
 function normalizeSettings(pairs) {
   const raw = {};
   (pairs || []).forEach((pair) => { raw[String(pair[0]).trim()] = pair[1]; });
@@ -368,9 +350,7 @@ function publicState_() {
   const cached = cache.get(STATE_CACHE_KEY);
   if (cached) return cached;
 
-  const settings = readSettings_();
-  const rows = settings.status === 'CLOSED' ? readVotes_() : [];
-  const json = JSON.stringify(stateResponse(settings, rows));
+  const json = JSON.stringify(stateResponse(readSettings_()));
   cache.put(STATE_CACHE_KEY, json, STATE_CACHE_SECONDS);
   return json;
 }
@@ -426,7 +406,7 @@ function handleSetStatus_(body) {
   return { ok: true, status: body.status };
 }
 
-// Refused once CLOSED, so a stray tap can't change results guests have already seen.
+// Refused once CLOSED, so a stray tap can't change the count the host is about to announce.
 // No lock: it changes one existing cell, and the host shouldn't queue behind a burst of votes.
 function handleUnlock_(body) {
   const passwordError = checkPassword_(body.password);

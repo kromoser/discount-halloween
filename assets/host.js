@@ -110,14 +110,14 @@ const STATUS_LABEL = { SOON: 'Soon', OPEN: 'Open', CLOSED: 'Closed' };
 const STATUS_NOW = {
   SOON: 'Guests see "Voting opens soon."',
   OPEN: 'Guests can vote.',
-  CLOSED: 'Guests now see results.',
+  CLOSED: 'Guests see "Voting is closed."',
 };
 
 // What the second tap would do.
 function statusHelp(armed, status) {
-  if (armed === 'CLOSED') return "Closing shows results on every guest's phone.";
+  if (armed === 'CLOSED') return "Closing ends voting on every guest's phone.";
   if (armed === 'SOON') return 'Guests go back to "Voting opens soon" and can\'t vote.';
-  return status === 'CLOSED' ? 'Results go away and guests can vote again.' : 'Guests can start voting.';
+  return status === 'CLOSED' ? 'Guests can vote again.' : 'Guests can start voting.';
 }
 
 function renderActions() {
@@ -229,7 +229,7 @@ function renderFlags({ flagGroups, ballots }) {
 
 function renderBallots() {
   const { ballots, status } = state.data;
-  // Closed is final until reopened: unlocking then would change results guests have seen.
+  // Closed is final until reopened: unlocking then would change the count being announced.
   const canUnlock = status !== 'CLOSED';
   $('unlock-helper').hidden = !canUnlock;
   $('unlock-error').textContent = state.unlockError;
